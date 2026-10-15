@@ -32,8 +32,8 @@ minutes, the endpoint answers `429` with a `retry_in_seconds` field and a
 
 ### `GET /api/health`
 
-No session required. Deliberately reveals nothing about the machine: a
-supervisor needs to know whether the process is alive, not what it sees.
+No session required. It reveals nothing about the machine: a supervisor
+needs to know whether the process is alive, not what it monitors.
 
 ```json
 { "status": "ok", "version": "v1.0.0", "uptime": 3600, "demo": false }
@@ -185,7 +185,7 @@ Notes:
   `top` uses, so four busy threads on a four core box read as 100%.
 - `exposed` on a listening socket means it is bound to a wildcard address
   and is therefore reachable from the network, not just from localhost.
-- Rate fields (`rx_bps`, `read_bps`, …) are bytes per second and are zero on
+- Rate fields (`rx_bps`, `read_bps`, ...) are bytes per second and are zero on
   the very first sample, because a rate needs two readings.
 - `systemd.error` and `docker.error` explain why a section is unavailable
   rather than leaving it mysteriously empty.
@@ -213,7 +213,7 @@ budget (30 to 2000, default 360).
 `resolution` says what the numbers are: `raw` for individual samples,
 `minute` or `hour` for averages. Individual samples are always preferred
 when they fit in the point budget; when the aggregate tables are still
-empty — the first minutes after a restart — the answer comes from the raw
+empty - the first minutes after a restart - the answer comes from the raw
 rows rather than being empty.
 
 ### `GET /api/events?limit=50`

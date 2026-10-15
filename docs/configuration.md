@@ -6,7 +6,7 @@ variable (`EOL_<KEY>`), and a few of the common ones through a command line
 flag. The order of precedence is:
 
 ```
-defaults  <  configuration file  <  environment  <  command line flags
+defaults < configuration file < environment < command line flags
 ```
 
 Print what the process actually resolved:
@@ -23,7 +23,7 @@ eye-of-lotus -print-config        # passwords and the session secret are hidden
 |---|---|---|---|
 | `listen` | string | `127.0.0.1:9110` | Address to bind. Loopback by default: reach the panel through an SSH tunnel or a reverse proxy rather than publishing it. |
 | `base_path` | string | `""` | URL prefix when served under a subpath, for example `/lotus`. Must start with a slash. |
-| `password` | string | — | The single passphrase. A PBKDF2 hash is strongly preferred; a plain value also works but the panel warns about it at every start. Required unless `demo` is set. |
+| `password` | string | - | The single passphrase. A PBKDF2 hash is strongly preferred; a plain value also works but the panel warns about it at every start. Required unless `demo` is set. |
 | `session_secret` | string | generated | Signs session cookies. Generated on first run and written back to the file so that a restart does not log everyone out. |
 | `session_ttl` | duration | `12h` | How long a login lasts. |
 | `trust_proxy` | bool | `false` | Believe `X-Forwarded-For`. Enable **only** when a reverse proxy you control sets it; otherwise a client can forge the header and bypass the login throttle. |
@@ -69,9 +69,8 @@ pruned once its retention window has passed. Nothing needs a cron job.
 | `docker` | bool | `true` | Read containers from the Docker daemon. |
 | `docker_socket` | string | `/var/run/docker.sock` | Alternative socket path. |
 
-Both are optional and both degrade honestly: when systemd or Docker is not
-reachable, the section says so and explains why, instead of showing an
-empty list.
+Both are optional. When systemd or Docker is not reachable, the section
+explains why instead of showing an empty list.
 
 ## Environment variables
 
@@ -157,8 +156,8 @@ with the number and the threshold behind it.
 | Swap used | 40% | 80% |
 | Load average / cores | 1.5x | 3x |
 | CPU iowait | 25% | 50% |
-| Probe latency | 400 ms | — |
-| DNS lookup | 500 ms | — |
+| Probe latency | 400 ms | - |
+| DNS lookup | 500 ms | - |
 | Temperature | 80 °C | 95 °C |
 
 Some findings have no threshold: no internet, failing DNS, failed units,

@@ -7,7 +7,7 @@
 **A read-only eye on a Linux server.**
 
 Hardware, network, processes, systemd units, containers, and a verdict on
-what is wrong — in one small binary with no dependencies and no way to
+what is wrong - in one small binary with no dependencies and no way to
 break anything.
 
 [Русская версия](README.ru.md) · [Configuration](docs/configuration.md) · [API](docs/api.md)
@@ -22,10 +22,6 @@ A single Go binary that watches one Linux machine and serves a web page
 about it. It reads `/proc`, `/sys`, the systemd bus and the Docker socket.
 It never writes anything except its own history database, and the HTTP API
 has no endpoint that can change the state of the machine.
-
-```
-point it at a server, open the page, see what is wrong
-```
 
 ## What it shows
 
@@ -47,22 +43,22 @@ containers, high temperature, read-only filesystems and zombie processes.
 Every threshold is published by the API, so the interface can explain a
 verdict instead of asserting it.
 
-## What it deliberately is not
+## What it is not
 
 - **Not an agent.** It monitors the machine it runs on. There is no
-  central server, no fleet, no inbound connections from anywhere.
-- **Not a control panel.** No restart, no kill, no edit. A monitoring tool
-  with write access is a remote shell that happens to have nice fonts.
-- **Not a Prometheus replacement.** No metrics endpoint to scrape, no
-  alerting rules. It is for the person who wants one answer to "is
-  anything wrong with this box".
+  central server, no fleet and no inbound connections.
+- **Not a control panel.** There is no restart, no kill and no edit. The
+  HTTP API has no endpoint that changes anything.
+- **Not a Prometheus replacement.** There is no metrics endpoint to
+  scrape and no alerting rules. It answers one question: is anything
+  wrong with this machine.
 
 ## Design
 
 The interface is graphite with flat one-pixel borders, one monospace
 family, and no decoration that does not carry meaning:
 
-- no gradients, no glow, no neon — every colour is a single flat value
+- no gradients, no glow, no neon - every colour is a single flat value
 - status is a small square: white for fine, violet for a warning, and a
   hard blink in crimson for something critical
 - motion is limited to a linear width change on meters and the blink;
@@ -82,7 +78,7 @@ go build -o eye-of-lotus ./cmd/eye-of-lotus
 
 Demo mode serves a synthetic machine. No password is needed and nothing on
 your host is read. After two minutes the synthetic machine starts filling a
-filesystem — a warning appears a few minutes later and a critical finding
+filesystem - a warning appears a few minutes later and a critical finding
 shortly after, so both levels of the status styling can be seen.
 
 ### Install on a server
@@ -111,7 +107,7 @@ sudo systemctl enable --now eye-of-lotus
 ```
 
 The panel listens on `127.0.0.1:9110` by default. Reach it through an SSH
-tunnel (`ssh -L 9110:127.0.0.1:9110 server`) or a reverse proxy — both are
+tunnel (`ssh -L 9110:127.0.0.1:9110 server`) or a reverse proxy - both are
 safer than exposing it, even with a password.
 
 ### Docker
@@ -123,15 +119,15 @@ docker compose up -d
 
 A container sees hardware, network and processes for real (it shares the
 kernel and, with `pid: host`, the process namespace). systemd state is not
-available inside a container unless you deliberately mount the host's
-D-Bus socket — see the comments in `docker-compose.yml`. For the complete
+available inside a container unless you mount the host's
+D-Bus socket - see the comments in `docker-compose.yml`. For the complete
 picture, install it natively.
 
 ## Configuration
 
 Everything lives in one JSON file, `/etc/eye-of-lotus/config.json` by
 default. Every key can be overridden by an environment variable
-(`EOL_LISTEN`, `EOL_PASSWORD`, `EOL_DATABASE`, …) and by a command line
+(`EOL_LISTEN`, `EOL_PASSWORD`, `EOL_DATABASE`, ...) and by a command line
 flag, in that order of increasing precedence.
 
 ```bash
@@ -174,14 +170,10 @@ internal/web          HTTP, authentication, embedded single-page interface
 web assets            HTML, CSS and JavaScript, embedded in the binary
 ```
 
-Two decisions are worth explaining.
-
 **Almost no dependencies.** SQLite is the only one, and it is pure Go, so
 `CGO_ENABLED=0` produces a static binary. systemd is reached through a
 D-Bus client written for this project rather than a library, and Docker
-through a small HTTP client over the socket. A monitor should not be the
-heaviest thing on the machine, and it should not break because a
-dependency changed.
+through a small HTTP client over the socket.
 
 **No frontend build step.** The interface is plain HTML, CSS and
 JavaScript, embedded with `embed`. There is no Node, no bundler and no
@@ -204,6 +196,14 @@ process command line containing parentheses still parses. The systemd and
 Docker collectors cannot be exercised without those daemons present; they
 degrade into an explanatory finding instead of failing, which is what the
 tests assert.
+
+## Authors
+
+Daniil ([@nelvixboy](https://github.com/nelvixboy)) - idea, requirements,
+testing and review.
+
+DeepSeek Harness - the AI coding agent that wrote the Go code, the
+interface and this documentation under his direction.
 
 ## License
 

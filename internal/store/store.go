@@ -467,9 +467,9 @@ type Event struct {
 // The level of detail is chosen from the length of the window and the
 // cadence each level is written at, and trimmed if it turns out to hold
 // more rows than the caller asked for. A coarser level is only used when
-// it genuinely carries the window: if the aggregate table is nearly empty
-// — which is the normal state of affairs for the first minutes after a
-// restart, before aggregation has run — the individual samples are better
+// it genuinely carries the window: if the aggregate table is nearly empty,
+// which is the normal state of affairs for the first minutes after a
+// restart before aggregation has run, the individual samples are better
 // than the handful of averages.
 func (s *Store) History(ctx context.Context, from, to time.Time, maxPoints int) ([]model.HistoryPoint, HistoryInfo, error) {
 	if maxPoints <= 0 {
