@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/nelvixboy/eye-of-lotus/internal/model"
 	"github.com/nelvixboy/eye-of-lotus/internal/proc"
@@ -421,9 +420,6 @@ func readTemperature(opts Options) (float64, bool) {
 	return round2(best), found
 }
 
-// Temperature exposes the thermal reading to the snapshot writer.
-func Temperature(opts Options) (float64, bool) { return readTemperature(opts) }
-
 // sortIssues orders findings so that the most urgent come first and ties
 // are broken alphabetically, which keeps the list stable between samples.
 func sortIssues(issues []model.Issue) {
@@ -454,23 +450,3 @@ func humanBytes(b uint64) string {
 	}
 	return fmt.Sprintf("%.1f %s", v, units[i])
 }
-
-// HumanBytes is the exported form used by the snapshot writer.
-func HumanBytes(b uint64) string { return humanBytes(b) }
-
-// uptimeWords renders a duration the way an operator reads it.
-func uptimeWords(d time.Duration) string {
-	days := int(d.Hours()) / 24
-	hours := int(d.Hours()) % 24
-	switch {
-	case days > 0:
-		return fmt.Sprintf("%dd %dh", days, hours)
-	case hours > 0:
-		return fmt.Sprintf("%dh %dm", hours, int(d.Minutes())%60)
-	default:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	}
-}
-
-// UptimeWords is the exported form used by the snapshot writer.
-func UptimeWords(d time.Duration) string { return uptimeWords(d) }

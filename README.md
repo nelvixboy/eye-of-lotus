@@ -87,7 +87,7 @@ filesystem, so the critical styling can be seen.
 ### Install on a server
 
 ```bash
-# 1. Build (Go 1.25 or newer, no other toolchain needed)
+# 1. Build (Go 1.26 or newer, no other toolchain needed)
 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o eye-of-lotus ./cmd/eye-of-lotus
 
 # 2. Create the service account and directories

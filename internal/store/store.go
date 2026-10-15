@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nelvixboy/eye-of-lotus/internal/collect"
 	"github.com/nelvixboy/eye-of-lotus/internal/model"
 
 	_ "modernc.org/sqlite"
@@ -136,10 +135,10 @@ func (s *Store) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = s.aggregate(ctx)
-	_ = s.db.Close()
-	// A final checkpoint keeps the write-ahead log from growing without
-	// bound between restarts.
-	return nil
+	// Checkpoint the write-ahead log so that a long-running panel does not
+	// leave a large -wal file behind on shutdown.
+	_, _ = s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+	return s.db.Close()
 }
 
 const schema = `
@@ -610,20 +609,6 @@ func (s *Store) Stats(ctx context.Context) (Stats, error) {
 	}
 	return st, nil
 }
-
-// DiskUsagePercent is the largest filesystem usage in the snapshot, which
-// the history table stores as a single number.
-func DiskUsagePercent(snap model.Snapshot) float64 {
-	var max float64
-	for _, d := range snap.Disks {
-		if d.UsedPct > max {
-			max = d.UsedPct
-		}
-	}
-	return max
-}
-
-var _ = collect.HumanBytes
 
 func boolToInt(b bool) int {
 	if b {

@@ -49,10 +49,6 @@ func (r *Root) Resolve(name string) string {
 	return filepath.Join(r.Dir, name)
 }
 
-// Enabled reports whether the root is a real proc root rather than a
-// fixture, which the tools that shell out or stat real paths need to know.
-func (r *Root) Enabled() bool { return r != nil && r.Dir == "/" }
-
 // DataPath maps an absolute kernel path such as a mount point onto a host
 // path that can be handed to a syscall. On a real machine the path is
 // returned unchanged; under a fixture root it is looked up inside the

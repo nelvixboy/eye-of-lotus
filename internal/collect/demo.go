@@ -18,10 +18,16 @@ import (
 // machine has a slow diurnal cycle, a few services, and an incident every
 // so often, so that the interface is exercised rather than flattered.
 type Demo struct {
-	mu     sync.Mutex
-	rng    *rand.Rand
-	start  time.Time
-	last   time.Time
+	mu    sync.Mutex
+	rng   *rand.Rand
+	start time.Time
+	last  time.Time
+	// launch is when the demo began; the incident timer runs from launch,
+	// not from the synthetic boot time in start.
+	launch time.Time
+	// seed is retained so the startup log can name it without drawing
+	// from the RNG.
+	seed   int64
 	tick   int
 	offset float64
 
@@ -29,9 +35,9 @@ type Demo struct {
 	diskPct float64
 	cpuBase float64
 	memBase float64
-	// incident counters
+	// cpuSpike records the tick when the CPU first crossed the incident
+	// threshold, so the demo can report the start of the trouble.
 	cpuSpike int
-	memSpike int
 }
 
 // DemoOptions tunes the synthetic machine.
@@ -66,8 +72,10 @@ func NewDemo(opt DemoOptions) *Demo {
 	now := opt.Now()
 	return &Demo{
 		rng:     rand.New(rand.NewSource(opt.Seed)),
+		seed:    opt.Seed,
 		start:   now.Add(-37*time.Hour - 12*time.Minute),
 		last:    now,
+		launch:  now,
 		diskPct: 41,
 		cpuBase: 14,
 		memBase: 46,
@@ -96,7 +104,7 @@ func (d *Demo) Snapshot(ctx context.Context) model.Snapshot {
 	// Incident: after the configured delay the synthetic machine grows a
 	// filesystem that slowly fills, so a critical finding appears without
 	// anyone having to break a real server.
-	if d.offset > 0 && now.Sub(d.start).Seconds() > d.offset {
+	if d.offset > 0 && now.Sub(d.launch).Seconds() > d.offset {
 		d.diskPct = math.Min(99.4, d.diskPct+0.06)
 		d.cpuBase = math.Min(88, d.cpuBase+0.03)
 		if d.cpuBase > 80 && d.cpuSpike == 0 {
@@ -335,5 +343,5 @@ func (d *Demo) services() model.Services {
 
 // String describes the demo machine for the startup log.
 func (d *Demo) String() string {
-	return fmt.Sprintf("demo machine (seed %d)", d.rng.Int63())
+	return fmt.Sprintf("demo machine (seed %d)", d.seed)
 }

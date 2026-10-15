@@ -90,7 +90,7 @@ go build -o eye-of-lotus ./cmd/eye-of-lotus
 ### Установка на сервер
 
 ```bash
-# 1. Сборка (Go 1.25 или новее, больше ничего не требуется)
+# 1. Сборка (Go 1.26 или новее, больше ничего не требуется)
 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o eye-of-lotus ./cmd/eye-of-lotus
 
 # 2. Служебный пользователь и каталоги
