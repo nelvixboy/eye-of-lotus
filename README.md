@@ -83,6 +83,20 @@ shortly after, so both levels of the status styling can be seen.
 
 ### Install on a server
 
+There is an installer that does the five steps below in one command:
+
+```bash
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o eye-of-lotus ./cmd/eye-of-lotus
+sudo deploy/install.sh -b ./eye-of-lotus
+```
+
+It creates the service account, asks for the password and stores its hash,
+writes the configuration, installs the unit and starts the service. Running
+it again is the upgrade path: the binary and the unit are replaced, an
+existing configuration is left alone.
+
+To do the same by hand:
+
 ```bash
 # 1. Build (Go 1.26 or newer, no other toolchain needed)
 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o eye-of-lotus ./cmd/eye-of-lotus

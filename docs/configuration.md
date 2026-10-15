@@ -127,12 +127,18 @@ eye-of-lotus -hash-password 'correct horse battery staple'
 ```
 
 ```
-Password hash for "correct horse battery staple":
-
-  "password": "pbkdf2-sha256$210000$...$..."
-
-Put it in /etc/eye-of-lotus/config.json.
+pbkdf2-sha256$210000$K3Jd...$9fQ2...
 ```
+
+The hash is printed on its own line, so a script can capture it directly:
+
+```bash
+hash=$(eye-of-lotus -hash-password 'a long passphrase')
+```
+
+Put the result in the `password` key. A plain password also works, and is
+compared in constant time, but the panel logs a warning about it at every
+start.
 
 The hash is PBKDF2-HMAC-SHA256 with 210,000 iterations and a 16 byte
 random salt. The iteration count is stored with the hash, so it can be

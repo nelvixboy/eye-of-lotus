@@ -255,7 +255,11 @@ func Load(args []string) (Config, error) {
 		if err != nil {
 			return cfg, err
 		}
-		fmt.Printf("Password hash for %q:\n\n  \"password\": %q\n\nPut it in %s.\n", *genHash, hash, *configPath)
+		// The hash goes to stdout on its own so that a script can capture
+		// it with $(...); the guidance goes to stderr so that it does not
+		// end up inside the captured value.
+		fmt.Println(hash)
+		fmt.Fprintf(os.Stderr, "Paste this hash into the \"password\" key of %s.\n", *configPath)
 		return cfg, ErrHandled
 	}
 	if *printConfig {

@@ -84,6 +84,20 @@ go build -o eye-of-lotus ./cmd/eye-of-lotus
 
 ### Установка на сервер
 
+Есть установщик, который делает все пять шагов ниже одной командой:
+
+```bash
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o eye-of-lotus ./cmd/eye-of-lotus
+sudo deploy/install.sh -b ./eye-of-lotus
+```
+
+Он создаёт служебного пользователя, спрашивает пароль и сохраняет его хеш,
+пишет конфигурацию, ставит юнит и запускает сервис. Повторный запуск - это
+обновление: бинарник и юнит заменяются, существующая конфигурация остаётся
+нетронутой.
+
+То же самое руками:
+
 ```bash
 # 1. Сборка (Go 1.26 или новее, больше ничего не требуется)
 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o eye-of-lotus ./cmd/eye-of-lotus
