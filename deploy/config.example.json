@@ -1,0 +1,32 @@
+{
+  "listen": "127.0.0.1:9110",
+  "base_path": "",
+
+  "password": "pbkdf2-sha256$210000$REPLACE_ME$REPLACE_ME",
+  "session_ttl": "12h",
+
+  "database": "/var/lib/eye-of-lotus/history.db",
+  "sample_interval": "2s",
+  "store_interval": "15s",
+  "retain_raw": "24h",
+  "retain_minute": "7d",
+  "retain_hour": "90d",
+
+  "disks": [],
+  "ifaces": [],
+  "top_procs": 12,
+
+  "probe_interval": "15s",
+  "probe_targets": ["1.1.1.1:53", "8.8.8.8:53", "9.9.9.9:53"],
+  "dns_name": "one.one.one.one",
+
+  "systemd": true,
+  "systemd_bus": "",
+  "systemd_detail": true,
+  "docker": true,
+  "docker_socket": "/var/run/docker.sock",
+
+  "trust_proxy": false,
+  "demo": false,
+  "log_level": "info"
+}

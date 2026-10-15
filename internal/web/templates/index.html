@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en" data-base="{{BASE_PATH}}" data-version="{{ASSET_VERSION}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex, nofollow">
+<title>Eye of Lotus</title>
+<link rel="icon" href="{{BASE_PATH}}/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="{{BASE_PATH}}/static/app.css?v={{ASSET_VERSION}}">
+</head>
+<body>
+<!--
+  Eye of Lotus - a read-only eye on a Linux server.
+  Everything below is drawn from a single JSON snapshot fetched every
+  couple of seconds. There is no framework, no build step and no external
+  request: the page you are reading is the page in the binary.
+-->
+
+<!-- The login veil. It is shown by default and hidden by the script once
+     a session is known to be valid, so an unauthenticated visitor never
+     sees a flash of the machine's data. -->
+<div id="veil" class="veil">
+  <div class="veil__panel">
+    <div class="veil__mark" aria-hidden="true">
+      <svg viewBox="0 0 120 120" class="lotus" role="img" aria-label="Eye of Lotus">
+        <g fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M60 22 C60 22 42 42 42 60 C42 78 52 92 60 100 C68 92 78 78 78 60 C78 42 60 22 60 22 Z"/>
+          <path d="M60 34 C50 48 48 60 48 70 C48 82 54 91 60 97 C66 91 72 82 72 70 C72 60 70 48 60 34 Z" opacity="0.65"/>
+          <path d="M60 100 C44 96 28 84 20 68 C30 62 44 60 54 66"/>
+          <path d="M60 100 C76 96 92 84 100 68 C90 62 76 60 66 66"/>
+          <path d="M60 100 C50 108 38 114 26 116 C28 106 36 100 46 98"/>
+          <path d="M60 100 C70 108 82 114 94 116 C92 106 84 100 74 98"/>
+          <circle cx="60" cy="66" r="7"/>
+          <circle cx="60" cy="66" r="2.5" fill="currentColor" stroke="none"/>
+        </g>
+      </svg>
+    </div>
+    <h1 class="veil__title">EYE OF LOTUS</h1>
+    <p class="veil__subtitle">a watchful eye over this machine</p>
+    <form id="login-form" class="veil__form" autocomplete="on">
+      <label class="field">
+        <span class="field__label">PASSPHRASE</span>
+        <input id="password" class="field__input" type="password" name="password"
+               autocomplete="current-password" required autofocus>
+      </label>
+      <button id="login-button" class="button" type="submit">OPEN THE EYE</button>
+      <p id="login-error" class="veil__error" role="alert" hidden></p>
+    </form>
+    <p class="veil__foot">read-only &middot; no agent &middot; nothing leaves this machine</p>
+  </div>
+</div>
+
+<!-- The panel proper. -->
+<div id="app" class="app" hidden>
+  <header class="masthead">
+    <div class="masthead__brand">
+      <svg viewBox="0 0 120 120" class="lotus lotus--small" aria-hidden="true">
+        <g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M60 22 C60 22 42 42 42 60 C42 78 52 92 60 100 C68 92 78 78 78 60 C78 42 60 22 60 22 Z"/>
+          <path d="M60 100 C44 96 28 84 20 68 C30 62 44 60 54 66"/>
+          <path d="M60 100 C76 96 92 84 100 68 C90 62 76 60 66 66"/>
+          <circle cx="60" cy="66" r="8"/>
+        </g>
+      </svg>
+      <span class="masthead__wordmark">EYE OF LOTUS</span>
+    </div>
+    <div class="masthead__meta">
+      <span id="m-host" class="masthead__host">&mdash;</span>
+      <span id="m-verdict" class="verdict" data-sev="ok">UNKNOWN</span>
+      <span id="m-clock" class="masthead__clock">&mdash;</span>
+      <button id="logout" class="button button--quiet" type="button">close</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="rail" aria-label="sections">
+      <ol class="rail__list">
+        <li><a class="rail__link" href="#verdict"><i>0</i><span>Verdict</span></a></li>
+        <li><a class="rail__link" href="#hardware"><i>I</i><span>Hardware</span></a></li>
+        <li><a class="rail__link" href="#network"><i>II</i><span>Network</span></a></li>
+        <li><a class="rail__link" href="#processes"><i>III</i><span>Processes</span></a></li>
+        <li><a class="rail__link" href="#services"><i>IV</i><span>Services</span></a></li>
+        <li><a class="rail__link" href="#revelations"><i>V</i><span>Revelations</span></a></li>
+      </ol>
+    </nav>
+
+    <main class="main">
+      <section id="verdict" class="section">
+        <h2 class="section__title"><span class="section__numeral">0</span>Verdict</h2>
+        <div id="verdict-grid" class="grid grid--tiles"></div>
+      </section>
+
+      <section id="hardware" class="section">
+        <h2 class="section__title"><span class="section__numeral">I</span>Hardware</h2>
+        <div id="hardware-grid" class="grid"></div>
+      </section>
+
+      <section id="network" class="section">
+        <h2 class="section__title"><span class="section__numeral">II</span>Network</h2>
+        <div id="network-grid" class="grid"></div>
+      </section>
+
+      <section id="processes" class="section">
+        <h2 class="section__title"><span class="section__numeral">III</span>Processes</h2>
+        <div id="processes-grid" class="grid"></div>
+      </section>
+
+      <section id="services" class="section">
+        <h2 class="section__title"><span class="section__numeral">IV</span>Services</h2>
+        <div id="services-grid" class="grid"></div>
+      </section>
+
+      <section id="revelations" class="section">
+        <h2 class="section__title"><span class="section__numeral">V</span>Revelations</h2>
+        <div id="revelations-grid" class="grid"></div>
+      </section>
+
+      <div class="petals" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </main>
+  </div>
+
+  <footer class="colophon">
+    <span id="c-sampled">&mdash;</span>
+    <span class="colophon__sep">/</span>
+    <span id="c-history">&mdash;</span>
+    <span class="colophon__sep">/</span>
+    <span id="c-version">&mdash;</span>
+    <span class="colophon__sep">/</span>
+    <span class="colophon__note">read-only</span>
+  </footer>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="{{BASE_PATH}}/static/app.js?v={{ASSET_VERSION}}" defer></script>
+</body>
+</html>

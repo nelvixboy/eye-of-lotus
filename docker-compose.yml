@@ -1,0 +1,87 @@
+# Eye of Lotus - read-only server monitor
+#
+#   cp .env.example .env      # then edit the password
+#   docker compose up -d
+#
+# Open http://127.0.0.1:9110 and enter the password from .env.
+#
+# Nothing in this file lets the panel change the state of the host: the
+# container filesystem is read-only, every bind mount is read-only, all
+# capabilities are dropped, and the application itself has no endpoint
+# that writes anything except its own history database.
+#
+# What a container can and cannot see:
+#   * hardware, network and processes: real, because the container shares
+#     the host kernel and pid namespace (pid: host)
+#   * Docker containers: available if you mount the daemon socket below
+#   * systemd units: not available, because reaching the host's systemd
+#     needs the host's D-Bus socket and its policy. Install the panel
+#     natively (see deploy/eye-of-lotus.service) for the full picture.
+
+services:
+  eye-of-lotus:
+    build:
+      context: .
+      args:
+        VERSION: ${EOL_VERSION:-dev}
+    image: eye-of-lotus:${EOL_VERSION:-dev}
+    container_name: eye-of-lotus
+    restart: unless-stopped
+
+    # Loopback only by default. Put a reverse proxy in front of it, or
+    # publish it on a private network you control.
+    ports:
+      - "127.0.0.1:9110:9110"
+
+    environment:
+      # Prefer a hash over a plain password. Generate one with:
+      #   docker compose run --rm eye-of-lotus -hash-password 'secret'
+      EOL_PASSWORD: ${EOL_PASSWORD:?set EOL_PASSWORD in .env}
+      EOL_DATABASE: /var/lib/eye-of-lotus/history.db
+      EOL_LOG_LEVEL: ${EOL_LOG_LEVEL:-info}
+      # Enable only when a reverse proxy you control sets
+      # X-Forwarded-For; otherwise the login throttle can be bypassed.
+      EOL_TRUST_PROXY: ${EOL_TRUST_PROXY:-false}
+      # Set to true after uncommenting the D-Bus socket mount below.
+      EOL_SYSTEMD: ${EOL_SYSTEMD:-false}
+      EOL_DOCKER: ${EOL_DOCKER:-false}
+
+    volumes:
+      # History: the only writable path in the deployment.
+      - lotus-history:/var/lib/eye-of-lotus
+
+      # Uncomment to let the panel list containers. The socket is mounted
+      # read-only and the client only issues GET requests, but be aware
+      # that the Docker socket is powerful: any process holding it can
+      # ask the daemon to do things. Grant it deliberately.
+      #   - /var/run/docker.sock:/var/run/docker.sock:ro
+
+      # Uncomment together with EOL_SYSTEMD=true to read unit state from
+      # the host's systemd. This mounts the host's bus socket into the
+      # container, which is a real trust decision, not a formality.
+      #   - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
+
+      # Temperature sensors, if the host has them.
+      #   - /sys/class/thermal:/sys/class/thermal:ro
+
+    # Share the host's pid namespace so that the process table shows the
+    # machine rather than the container.
+    pid: host
+
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  lotus-history:
