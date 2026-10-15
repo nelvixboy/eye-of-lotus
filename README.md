@@ -82,7 +82,8 @@ go build -o eye-of-lotus ./cmd/eye-of-lotus
 
 Demo mode serves a synthetic machine. No password is needed and nothing on
 your host is read. After two minutes the synthetic machine starts filling a
-filesystem, so the critical styling can be seen.
+filesystem — a warning appears a few minutes later and a critical finding
+shortly after, so both levels of the status styling can be seen.
 
 ### Install on a server
 

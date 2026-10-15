@@ -102,11 +102,14 @@ func (d *Demo) Snapshot(ctx context.Context) model.Snapshot {
 	diurnal := math.Sin(t*2*math.Pi-1.2)*0.5 + 0.5
 
 	// Incident: after the configured delay the synthetic machine grows a
-	// filesystem that slowly fills, so a critical finding appears without
-	// anyone having to break a real server.
+	// filesystem that fills over a few minutes, so a warning and then a
+	// critical finding appear without anyone having to break a real
+	// server. The rate is tuned so the whole arc is visible in one short
+	// sitting: from 41% to the 88% warning in about three minutes, and to
+	// the 95% critical threshold shortly after.
 	if d.offset > 0 && now.Sub(d.launch).Seconds() > d.offset {
-		d.diskPct = math.Min(99.4, d.diskPct+0.06)
-		d.cpuBase = math.Min(88, d.cpuBase+0.03)
+		d.diskPct = math.Min(99.4, d.diskPct+0.6)
+		d.cpuBase = math.Min(88, d.cpuBase+0.15)
 		if d.cpuBase > 80 && d.cpuSpike == 0 {
 			d.cpuSpike = d.tick
 		}
