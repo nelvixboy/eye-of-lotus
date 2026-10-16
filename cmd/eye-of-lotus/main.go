@@ -64,9 +64,9 @@ func main() {
 func installRequested(args []string) (install, uninstall bool) {
 	for _, arg := range args {
 		switch strings.TrimLeft(arg, "-") {
-		case "install":
+		case "install", "i":
 			install = true
-		case "uninstall":
+		case "uninstall", "u":
 			uninstall = true
 		}
 	}
@@ -78,10 +78,14 @@ func runInstaller(asInstall bool) error {
 	fs := flag.NewFlagSet("eye-of-lotus", flag.ContinueOnError)
 	// The two mode flags are declared here as well, because this set is
 	// handed the same arguments that chose it: parsing would otherwise
-	// reject the very flag that got us here.
+	// reject the very flag that got us here. Each has a one letter form,
+	// since the common use is a single short command.
 	fs.Bool("install", false, "install as a service and exit")
+	fs.Bool("i", false, "short for -install")
 	fs.Bool("uninstall", false, "remove the service and exit")
+	fs.Bool("u", false, "short for -uninstall")
 	listen := fs.String("listen", "", "address to bind, for example 0.0.0.0:9110")
+	fs.StringVar(listen, "l", "", "short for -listen")
 	noDockerGroup := fs.Bool("no-docker-group", false, "leave the service account out of the docker group")
 	noFirewall := fs.Bool("no-firewall", false, "do not open the firewall")
 	if err := fs.Parse(os.Args[1:]); err != nil {

@@ -108,10 +108,14 @@ the old file kept as `config.json.bak`.
 
 | Flag | Effect |
 |---|---|
-| `-listen ADDR` | address to bind, `0.0.0.0:9110` to serve the local network |
+| `-listen ADDR`, `-l` | address to bind, `0.0.0.0:9110` to serve the local network |
 | `-no-docker-group` | leave the service account out of the docker group |
 | `-no-firewall` | do not open the port |
-| `-uninstall` | remove everything it installed |
+| `-uninstall`, `-u` | remove everything it installed |
+
+The short forms exist because an update is one short command: the address is
+already in the configuration, so `sudo eye-of-lotus -i` on its own replaces
+the binary and the service definition and leaves everything else alone.
 
 The password is asked for on the terminal with echoing off, or taken from
 `EOL_PASSWORD` when there is no terminal to ask on.
