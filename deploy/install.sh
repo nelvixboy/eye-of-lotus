@@ -18,6 +18,7 @@
 #                         0.0.0.0:9110 to serve the whole local network.
 #       --no-docker-group leave the service account out of the docker
 #                         group, at the cost of container visibility
+#       --no-firewall     do not open the firewall
 #       --uninstall       remove everything this script installed: the
 #                         service, the binary, the configuration, the
 #                         history and the service account
@@ -35,6 +36,7 @@ LISTEN_SET=0
 UNINSTALL=0
 DRY_RUN=0
 ADD_DOCKER_GROUP=1
+FIREWALL=1
 
 BIN_DST="/usr/local/bin/eye-of-lotus"
 CONF_DIR="/etc/eye-of-lotus"
@@ -65,6 +67,17 @@ has_listener() {
 	*":$1 "*) return 0 ;;
 	esac
 	return 1
+}
+
+# default_iface prints the interface that carries the default route. It is
+# the one a firewall rule has to name in order to reach the panel from the
+# local network, and going through the route table avoids guessing names
+# like eth0 or enp0s3.
+default_iface() {
+	local routes
+	routes="$(ip -4 route show default 2>/dev/null || true)"
+	printf '%s\n' "$routes" | awk '
+		{ for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }'
 }
 
 # pid_of_listener prints the process id owning a listening TCP port, and
@@ -99,6 +112,10 @@ while [ $# -gt 0 ]; do
 		;;
 	--no-docker-group)
 		ADD_DOCKER_GROUP=0
+		shift
+		;;
+	--no-firewall)
+		FIREWALL=0
 		shift
 		;;
 	--uninstall)
@@ -354,6 +371,52 @@ if command -v ss >/dev/null 2>&1 && has_listener "$PORT"; then
 	die "something is already listening on port ${PORT}; stop it and run this again (it may be a panel you started by hand earlier)"
 fi
 say "port ${PORT} is free"
+
+step "Firewall"
+# Opening a port is a security decision, so it is scoped to the interface
+# the local network arrives on and, separately, to the Docker bridge
+# networks. The second one is not obvious: a reverse proxy running in a
+# container reaches the panel from its bridge address, not from the local
+# network, and when the firewall drops that silently the proxy waits and
+# the browser spins. Neither rule opens the port to the internet.
+if [ "$FIREWALL" -eq 0 ]; then
+	say "skipped by request; open port ${PORT} yourself if you need it"
+elif ! command -v ufw >/dev/null 2>&1; then
+	say "ufw is not installed, so nothing was opened"
+	say "if another firewall is active, allow TCP ${PORT} yourself"
+else
+	ufw_state="$(ufw status 2>/dev/null || true)"
+	case "$ufw_state" in
+	*"Status: active"*) ;;
+	*) ufw_state="" ;;
+	esac
+	if [ -z "$ufw_state" ]; then
+		say "ufw is installed but not active; nothing to open"
+	else
+		case "$LISTEN" in
+		127.0.0.1:* | localhost:* | "[::1]:"*)
+			say "the panel is bound to the loopback address, so no rule is needed"
+			;;
+		*)
+			iface="$(default_iface)"
+			if [ -n "$iface" ]; then
+				if ufw allow in on "$iface" to any port "$PORT" proto tcp >/dev/null 2>&1; then
+					say "allowed the local network on ${iface} to reach port ${PORT}"
+				else
+					say "could not add the rule for ${iface}; open port ${PORT} yourself"
+				fi
+			else
+				say "could not work out the local interface; open port ${PORT} yourself"
+			fi
+			if getent group docker >/dev/null 2>&1; then
+				if ufw allow from 172.16.0.0/12 to any port "$PORT" proto tcp >/dev/null 2>&1; then
+					say "allowed container networks to reach port ${PORT} (a proxy in Docker needs this)"
+				fi
+			fi
+			;;
+		esac
+	fi
+fi
 
 step "systemd unit"
 install -m 0644 -o root -g root "$UNIT_SRC" "$UNIT_DST"

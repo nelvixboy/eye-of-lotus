@@ -135,6 +135,29 @@ the `docker` group, because the daemon socket is owned by `root:docker`.
 The installer adds it for you, and `--no-docker-group` skips that, at the
 cost of the container section reporting an unreachable daemon.
 
+### What the installer does
+
+It runs as root, and it is worth knowing what for before handing it that:
+
+| Step | Why it needs root |
+|---|---|
+| Creates the `eye-of-lotus` system user and group | the panel should not run as root, and needs an account of its own |
+| Adds that user to the `docker` group | the daemon socket belongs to `root:docker`; without this the container section reports an unreachable daemon |
+| Installs the binary to `/usr/local/bin` and the unit to `/etc/systemd/system` | both are root owned |
+| Writes `/etc/eye-of-lotus/config.json` as mode 0600 | it holds the only password, hashed |
+| Creates `/var/lib/eye-of-lotus` | the single path the service is allowed to write |
+| Opens the firewall, when one is active | one rule for the local interface and one for the container networks, and nothing beyond them |
+| Enables and starts the service | systemd |
+
+It touches nothing else. `--no-docker-group` and `--no-firewall` skip those
+two steps, and `--uninstall` reverses everything it did.
+
+The container network rule surprises people, so it is worth a line of its
+own. A reverse proxy running in Docker reaches the panel from its bridge
+address rather than from the local network. A firewall that drops that
+silently leaves the proxy waiting for an answer that will not come, and
+the browser spins on a page that is really just one blocked packet away.
+
 ### Docker
 
 ```bash
