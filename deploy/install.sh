@@ -172,6 +172,20 @@ JSON
 	say "wrote ${CONF}"
 fi
 
+step "Checking the port"
+# A process already holding the address looks exactly like a broken
+# service from the outside: the unit starts, exits with status 1, and
+# restarts in a loop. Catching it here turns a puzzling failure into a
+# sentence.
+PORT="${LISTEN##*:}"
+if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":${PORT} "; then
+	printf '\n' >&2
+	ss -ltnp 2>/dev/null | grep ":${PORT} " >&2 || true
+	printf '\n' >&2
+	die "something is already listening on port ${PORT}; stop it and run this again (it may be a panel you started by hand earlier)"
+fi
+say "port ${PORT} is free"
+
 step "systemd unit"
 install -m 0644 -o root -g root "$UNIT_SRC" "$UNIT_DST"
 systemctl daemon-reload
@@ -183,6 +197,10 @@ sleep 2
 if systemctl is-active --quiet "$SERVICE"; then
 	say "the service is running"
 else
+	printf '\n' >&2
+	# The journal is the only place the reason appears, and reading it
+	# needs root, which is why this runs while the installer still has it.
+	journalctl -u "$SERVICE" --no-pager --lines=30 >&2 || true
 	printf '\n' >&2
 	systemctl --no-pager --lines=20 status "$SERVICE" >&2 || true
 	die "the service failed to start; the output above says why"
