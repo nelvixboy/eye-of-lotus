@@ -3,6 +3,12 @@
 /dist/
 .build/
 
+# Build caches. These are Go's, and one of them was committed by
+# accident: 2300 files and 79 MB of compiled objects in a repository
+# whose real content is 62 files.
+.gocache/
+.gomodcache/
+
 # Local configuration and data
 .env
 *.db
