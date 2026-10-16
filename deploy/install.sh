@@ -134,6 +134,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
 	# Only what this installer created is touched. The docker group, the
 	# firewall and anything else on the host are left exactly as they are,
 	# because this script cannot know who else depends on them.
+	#
 	# The service is stopped before its unit file is removed. Once the file
 	# is gone systemd no longer knows how to stop the unit, while the
 	# process itself keeps running and holding the port.
@@ -146,6 +147,26 @@ if [ "$UNINSTALL" -eq 1 ]; then
 		systemctl stop "$SERVICE" >/dev/null 2>&1 || true
 		say "service stopped and disabled"
 	fi
+
+	# A panel started by an earlier install, or by hand, outlives the
+	# removal of its unit and keeps the port. It also holds the service
+	# account open, which is what makes the user removal below fail, so it
+	# is dealt with first.
+	port="${LISTEN##*:}"
+	if has_listener "$port"; then
+		pid="$(pid_of_listener "$port")"
+		say "something is still listening on port ${port}"
+		if [ -n "$pid" ] && kill "$pid" 2>/dev/null; then
+			sleep 1
+			say "stopped process ${pid}, left over from an earlier install"
+		fi
+		if has_listener "$port"; then
+			say "port ${port} is still busy; free it before installing again"
+		else
+			say "port ${port} is free now"
+		fi
+	fi
+
 	rm -f "$UNIT_DST"
 	systemctl daemon-reload >/dev/null 2>&1 || true
 	say "removed ${UNIT_DST}"
@@ -155,33 +176,27 @@ if [ "$UNINSTALL" -eq 1 ]; then
 	say "removed ${CONF_DIR} (the password lived here)"
 	rm -rf "$DATA_DIR"
 	say "removed ${DATA_DIR} (the metric history lived here)"
+
+	# The account is only reported as gone when it really is. userdel
+	# refuses while a process still runs as that user, and announcing
+	# success anyway is how an uninstall ends up half done without saying so.
 	if id -u "$RUN_USER" >/dev/null 2>&1; then
-		userdel "$RUN_USER" 2>/dev/null || true
-		say "removed user ${RUN_USER}"
+		if userdel "$RUN_USER" 2>/dev/null; then
+			say "removed user ${RUN_USER}"
+		else
+			say "could not remove user ${RUN_USER}: something is still running as it"
+		fi
+	else
+		say "user ${RUN_USER} was already gone"
 	fi
 	if getent group "$RUN_USER" >/dev/null 2>&1; then
-		groupdel "$RUN_USER" 2>/dev/null || true
-		say "removed group ${RUN_USER}"
-	fi
-
-	# A panel started by an earlier install, or by hand, outlives the
-	# removal of its unit and keeps the port. Nothing else will ever stop
-	# it, and the next install would fail on the busy address, so it is
-	# dealt with here.
-	port="${LISTEN##*:}"
-	if has_listener "$port"; then
-		pid="$(pid_of_listener "$port")"
-		printf '\n'
-		say "something is still listening on port ${port}"
-		if [ -n "$pid" ] && kill "$pid" 2>/dev/null; then
-			sleep 1
-			say "stopped process ${pid}, which was left over from an earlier install"
-		fi
-		if has_listener "$port"; then
-			say "port ${port} is still busy; free it before installing again"
+		if groupdel "$RUN_USER" 2>/dev/null; then
+			say "removed group ${RUN_USER}"
 		else
-			say "port ${port} is free now"
+			say "could not remove group ${RUN_USER}: it is still in use"
 		fi
+	else
+		say "group ${RUN_USER} was already gone"
 	fi
 
 	printf '\n'
