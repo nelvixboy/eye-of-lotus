@@ -16,6 +16,43 @@ break anything.
 
 ---
 
+## Try it
+
+Nothing installed, nothing to configure, no root needed. This downloads the
+binary for this machine, checks it, and runs a synthetic machine in the
+foreground:
+
+```bash
+arch=$(uname -m); case $arch in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; esac
+
+curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch" -o "eye-of-lotus-linux-$arch"
+curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch.sha256" -o "eye-of-lotus-linux-$arch.sha256"
+sha256sum -c "eye-of-lotus-linux-$arch.sha256"
+
+chmod +x "eye-of-lotus-linux-$arch"
+./"eye-of-lotus-linux-$arch" -demo
+```
+
+Then open **http://127.0.0.1:9110**. Nothing on your machine is read.
+
+## Install it
+
+Put that same file on the server, and let it install itself:
+
+```bash
+sudo ./eye-of-lotus-linux-amd64 -i -l 0.0.0.0:9110
+```
+
+That is the whole procedure: it works out how the host starts a service,
+writes the definition, creates the service account, asks for the password and
+stores only its hash, opens the firewall and starts it.
+
+| Later | Command |
+|---|---|
+| update | `sudo ./eye-of-lotus -i` |
+| remove | `sudo ./eye-of-lotus -u` |
+| see the flags | `./eye-of-lotus -h` |
+
 ## What it is
 
 A single Go binary that watches one Linux machine and serves a web page

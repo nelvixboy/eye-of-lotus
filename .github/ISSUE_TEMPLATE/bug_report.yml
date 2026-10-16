@@ -1,0 +1,77 @@
+name: Bug report
+description: Something did not work as expected
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time.
+
+        Two things before you start. **Do not paste your password**, and do
+        not attach `/etc/eye-of-lotus/config.json`: it holds the hash of the
+        only credential this panel has. Everything else is welcome, and a
+        report in Russian is fine.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `eye-of-lotus -version`.
+      placeholder: eye-of-lotus v0.1.13
+    validations:
+      required: true
+
+  - type: dropdown
+    id: how
+    attributes:
+      label: How is it running
+      options:
+        - Installed as a service by `-install`
+        - Run by hand, in the foreground
+        - In Docker
+        - Demo mode (`-demo`)
+    validations:
+      required: true
+
+  - type: input
+    id: system
+    attributes:
+      label: Operating system and init
+      description: For example "Debian 13, systemd" or "Artix, OpenRC". `cat /etc/os-release` and `ps -p 1 -o comm=` give both.
+      placeholder: Debian 13, systemd
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected instead
+      description: "If a section of the panel is wrong, name it: Hardware, Network, Processes, Services or History."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: What the logs say
+      description: |
+        For a service:
+        `systemctl status eye-of-lotus --no-pager --lines=30`
+        and `journalctl -u eye-of-lotus --no-pager --lines=50`.
+        For a foreground run, the terminal output.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: probe
+    attributes:
+      label: The probe output, if the Services section is involved
+      description: |
+        `go run ./cmd/probe` from a checkout prints what the D-Bus bus answers
+        at each step. It is the fastest way to see why systemd looks
+        unavailable.
+      render: shell
+    validations:
+      required: false

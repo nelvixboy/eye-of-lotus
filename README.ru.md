@@ -16,6 +16,43 @@
 
 ---
 
+## Попробовать
+
+Ничего не устанавливается, настраивать нечего, root не нужен. Команда
+скачает бинарник для этой машины, проверит его и запустит синтетическую
+машину на переднем плане:
+
+```bash
+arch=$(uname -m); case $arch in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; esac
+
+curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch" -o "eye-of-lotus-linux-$arch"
+curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch.sha256" -o "eye-of-lotus-linux-$arch.sha256"
+sha256sum -c "eye-of-lotus-linux-$arch.sha256"
+
+chmod +x "eye-of-lotus-linux-$arch"
+./"eye-of-lotus-linux-$arch" -demo
+```
+
+Потом открыть **http://127.0.0.1:9110**. На твоей машине ничего не читается.
+
+## Установить
+
+Тот же файл положить на сервер и дать ему установиться самому:
+
+```bash
+sudo ./eye-of-lotus-linux-amd64 -i -l 0.0.0.0:9110
+```
+
+Это вся процедура: он сам определяет, как хост запускает сервисы, пишет
+определение, создаёт служебного пользователя, спрашивает пароль и сохраняет
+только его хеш, открывает фаервол и запускает службу.
+
+| Потом | Команда |
+|---|---|
+| обновить | `sudo ./eye-of-lotus -i` |
+| удалить | `sudo ./eye-of-lotus -u` |
+| посмотреть флаги | `./eye-of-lotus -h` |
+
 ## Что это
 
 Один бинарник на Go, который следит за одной Linux-машиной и отдаёт про

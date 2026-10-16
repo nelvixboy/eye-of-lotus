@@ -1,0 +1,37 @@
+name: Feature request
+description: Something the panel should show or do
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Worth knowing before you write: this panel observes and never acts.
+        It will not restart a service, kill a process or change a setting,
+        and that is the point rather than a gap. Requests that keep that
+        property are the ones that fit.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to find out
+      description: Describe the situation on the machine, not the feature. What did you need to know that the panel did not tell you?
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you think it should look like
+      description: Optional. If you have a shape in mind, describe it. Screenshots of something that does it well are useful.
+    validations:
+      required: false
+
+  - type: input
+    id: system
+    attributes:
+      label: Where would this be used
+      description: The kind of machine and what runs on it, so the idea can be judged against a real case.
+      placeholder: Debian server with 40 containers and a software RAID
+    validations:
+      required: false
