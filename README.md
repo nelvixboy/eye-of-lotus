@@ -275,11 +275,13 @@ list.
 
 ## Authors
 
-Daniil ([@nelvixboy](https://github.com/nelvixboy)) - idea, requirements,
-testing and review.
+**Daniil** ([@nelvixboy](https://github.com/nelvixboy)) - the idea, the
+requirements, the design decisions, the judgement calls about what the panel
+should be, and the testing on a real machine.
 
-DeepSeek Harness - the AI coding agent that wrote the Go code, the
-interface and this documentation under his direction.
+**DeepSeek Harness** - an AI coding agent, which wrote the Go code, the
+embedded interface and this documentation under his direction. It is named
+here because a reader deserves to know how a thing was made.
 
 ## License
 
