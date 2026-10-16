@@ -78,6 +78,9 @@ if [ "$DRY_RUN" -eq 0 ]; then
 fi
 
 # A binary that cannot run is worse than no install, so ask it who it is.
+# A file copied with scp arrives without the execute bit, and that is not a
+# reason to refuse an otherwise good binary, so the bit is set here.
+chmod 0755 "$BIN_SRC" 2>/dev/null || true
 if ! "$BIN_SRC" -version >/dev/null 2>&1; then
 	die "$BIN_SRC does not run here; check that it is built for this architecture (GOARCH) and is executable"
 fi
