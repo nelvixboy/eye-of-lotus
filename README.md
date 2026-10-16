@@ -70,7 +70,7 @@ has no endpoint that can change the state of the machine.
 |---|---|
 | **0 Verdict** | The worst finding right now, how many there are, uptime, collection time |
 | **I Hardware** | CPU total and per core, load average, iowait, steal, temperature, RAM and swap, every real filesystem with usage, inodes and disk throughput |
-| **II Network** | Internet reachability by TCP probe, DNS resolution and its latency, throughput, every interface with errors and drops, every listening socket with the process that owns it and whether it faces the network |
+| **II Network** | Internet reachability by TCP probe, DNS resolution and its latency, throughput, every real interface with errors and drops, every listening socket with the process that owns it and whether it faces the network |
 | **III Processes** | Process table sorted by CPU, with user, RSS, threads, state and age |
 | **IV Services** | systemd units (running, failed, enabled, restarts) and Docker containers (state, health, restart loops) |
 | **V Revelations** | Every finding with an explanation and a suggested fix, plus the stored history |

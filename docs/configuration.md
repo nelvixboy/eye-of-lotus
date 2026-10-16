@@ -36,6 +36,7 @@ eye-of-lotus -print-config        # passwords and the session secret are hidden
 |---|---|---|---|
 | `database` | string | `/var/lib/eye-of-lotus/history.db` | SQLite file. An empty value disables history: the panel keeps only the last few minutes in memory. |
 | `sample_interval` | duration | `2s` | How often the machine is sampled. |
+| `store_interval` | duration | `15s` | How often a sample becomes a row in the history. Sampling faster than this only makes the panel more responsive; it does not make the history finer. |
 | `retain_raw` | duration | `24h` | How long individual samples are kept. |
 | `retain_minute` | duration | `7d` | How long one minute averages are kept. |
 | `retain_hour` | duration | `90d` | How long one hour averages are kept. |
@@ -52,7 +53,7 @@ pruned once its retention window has passed. Nothing needs a cron job.
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `disks` | list of strings | `[]` | Mount points to report. Empty means every real filesystem; pseudo filesystems such as `proc`, `sysfs` and `cgroup2` are always skipped. |
-| `ifaces` | list of strings | `[]` | Interfaces to report. Empty means every interface that has seen traffic; loopback is excluded unless named here. |
+| `ifaces` | list of strings | `[]` | Interfaces to report. Empty means every real interface; loopback and container plumbing (`veth`, `br-`, `docker`, `virbr` and similar) are excluded unless named here. A tunnel is not plumbing: `tun` and `tap` are reported. |
 | `top_procs` | int | `12` | How many processes the snapshot carries, sorted by CPU then memory. The machine's total process count is always reported. |
 | `probe_interval` | duration | `15s` | How often the internet and DNS probes run. They open real sockets, so they do not run on every sample. |
 | `probe_targets` | list of strings | `1.1.1.1:53`, `8.8.8.8:53`, `9.9.9.9:53` | TCP endpoints tried in order. A TCP connect is used rather than ICMP because it needs no privileges and works behind NAT. |
@@ -110,7 +111,10 @@ file inside a read-only container is not an option.
 -base-path PATH     URL prefix behind a reverse proxy
 -db PATH            SQLite history file, empty to disable history
 -no-history         disable history even if the configuration enables it
--password PASS      override the configured password
+-password PASS      override the configured password for one run. The
+                    value is visible in `ps` to every user of the machine
+                    and stays in the shell history, so prefer the
+                    configuration file or EOL_PASSWORD.
 -demo               serve a synthetic machine
 -proc-root PATH     read /proc and /sys from another root
 -log-level LEVEL    debug, info, warn or error

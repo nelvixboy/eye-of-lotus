@@ -2,8 +2,10 @@ package collect
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -403,6 +405,44 @@ func TestReadOnlyWarningOnlyForRealDevices(t *testing.T) {
 	for _, d := range snap.Disks {
 		if d.FSType == "tmpfs" && d.ReadOnly {
 			t.Errorf("a read-only tmpfs should not be flagged: %+v", d)
+		}
+	}
+}
+
+// TestExplainDockerNamesTheRealProblem covers the distinction that cost an
+// afternoon: "the daemon is not reachable" is technically true of a
+// permission problem and sends the reader looking in the wrong place. The
+// socket is there, the daemon is running, and the panel simply may not open
+// it, which is the default state of a fresh install.
+func TestExplainDockerNamesTheRealProblem(t *testing.T) {
+	const sock = "/var/run/docker.sock"
+	cases := []struct {
+		name string
+		err  error
+		want []string
+	}{
+		{
+			name: "nothing listening",
+			err:  errors.New("dial unix " + sock + ": connect: no such file or directory"),
+			want: []string{"not running", sock},
+		},
+		{
+			name: "the panel may not open it",
+			err:  errors.New("dial unix " + sock + ": connect: permission denied"),
+			want: []string{"permission denied", "docker group"},
+		},
+		{
+			name: "anything else",
+			err:  errors.New("dial unix " + sock + ": connect: connection refused"),
+			want: []string{"cannot reach", "connection refused"},
+		},
+	}
+	for _, c := range cases {
+		got := explainDocker(c.err, sock)
+		for _, want := range c.want {
+			if !strings.Contains(got, want) {
+				t.Errorf("%s: %q does not mention %q", c.name, got, want)
+			}
 		}
 	}
 }
