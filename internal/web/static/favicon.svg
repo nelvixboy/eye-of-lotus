@@ -1,12 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Eye of Lotus">
-  <rect width="120" height="120" fill="#131316"/>
-  <g fill="none" stroke="#f2f2f4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M60 18 C60 18 40 40 40 60 C40 80 51 94 60 104 C69 94 80 80 80 60 C80 40 60 18 60 18 Z"/>
-    <path d="M60 104 C44 100 26 86 17 68 C29 61 45 59 56 66"/>
-    <path d="M60 104 C76 100 94 86 103 68 C91 61 75 59 64 66"/>
+  <rect width="120" height="120" rx="18" fill="#131316"/>
+  <g fill="none" stroke="#f2f2f4" stroke-width="6.0" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M60.0 96.0 C59.8 71.9 38.0 57.7 19.9 51.4 C24.2 70.1 36.1 93.3 60.0 96.0 Z"/>
+    <path d="M60.0 96.0 C83.9 93.3 95.8 70.1 100.1 51.4 C82.0 57.7 60.2 71.9 60.0 96.0 Z"/>
   </g>
-  <g fill="none" stroke="#6d4fa3" stroke-width="3">
-    <circle cx="60" cy="66" r="9"/>
+  <g fill="none" stroke="#8f6ad8" stroke-width="6.0" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M60.0 96.0 C77.0 72.6 69.9 39.8 60.0 18.0 C50.1 39.8 43.0 72.6 60.0 96.0 Z"/>
   </g>
-  <circle cx="60" cy="66" r="3" fill="#f2f2f4"/>
+  <g fill="none" stroke="#8f6ad8" stroke-width="6.0">
+    <circle cx="60" cy="61" r="9.0"/>
+  </g>
+  <circle cx="60" cy="61" r="3.0" fill="#f2f2f4"/>
 </svg>
