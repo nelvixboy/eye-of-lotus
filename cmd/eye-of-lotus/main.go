@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -128,6 +129,19 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// A demo run must work for somebody who downloaded a single file and
+	// has no privileges at all. The configured history path belongs to the
+	// service account, so a demo that was not told otherwise keeps its
+	// history in a private temporary directory and takes it away on exit.
+	// The charts still fill in: they read the recent past out of memory as
+	// well, and that is all a demo has had time to collect anyway.
+	if cfg.Demo && !cfg.DatabaseSet {
+		if dir, err := os.MkdirTemp("", "eye-of-lotus-demo-"); err == nil {
+			defer os.RemoveAll(dir)
+			cfg.Database = filepath.Join(dir, "history.db")
+		}
+	}
 
 	// History is optional: without a database the panel still works, it
 	// simply forgets everything except the recent past held in memory.

@@ -42,6 +42,11 @@ type Config struct {
 	// Database is the SQLite file holding metric history. An empty value
 	// disables history entirely, which is useful for a one-off look.
 	Database string `json:"database"`
+	// DatabaseSet records whether that path came from a flag or the
+	// environment rather than from the defaults. A demo run uses it to
+	// decide whether it may put its history somewhere private instead of
+	// in the directory the service account owns.
+	DatabaseSet bool `json:"-"`
 	// SampleInterval is how often the machine is sampled.
 	SampleInterval Duration `json:"sample_interval"`
 	// StoreInterval is how often a sample is written to the database.
@@ -251,6 +256,7 @@ func Load(args []string) (Config, error) {
 			cfg.BasePath = *basePath
 		case "db":
 			cfg.Database = *database
+			cfg.DatabaseSet = true
 		case "password":
 			cfg.Password = *password
 		case "demo":
@@ -291,9 +297,15 @@ func Load(args []string) (Config, error) {
 			return cfg, err
 		}
 		cfg.SessionSecret = secret
-		if err := cfg.saveSecret(*configPath); err != nil {
+		// Only worth writing where there is a configuration to write to.
+		// A demo run and a bare invocation have none, and trying anyway
+		// produces a warning about a directory the caller cannot open,
+		// which reads like a fault in a program that is working.
+		if _, err := os.Stat(*configPath); err == nil && !cfg.Demo {
 			// Not fatal: the panel runs, sessions simply end on restart.
-			fmt.Fprintf(os.Stderr, "warning: could not persist the session secret to %s: %v\n", *configPath, err)
+			if err := cfg.saveSecret(*configPath); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not persist the session secret to %s: %v\n", *configPath, err)
+			}
 		}
 	}
 	return cfg, nil
@@ -356,7 +368,10 @@ func applyEnv(cfg *Config) {
 	set("EOL_LISTEN", &cfg.Listen)
 	set("EOL_BASE_PATH", &cfg.BasePath)
 	set("EOL_PASSWORD", &cfg.Password)
-	set("EOL_DATABASE", &cfg.Database)
+	if v := os.Getenv("EOL_DATABASE"); v != "" {
+		cfg.Database = v
+		cfg.DatabaseSet = true
+	}
 	set("EOL_LOG_LEVEL", &cfg.LogLevel)
 	set("EOL_DNS_NAME", &cfg.DNSName)
 	set("EOL_PROC_ROOT", &cfg.ProcRoot)
