@@ -53,6 +53,11 @@ func main() {
 			return
 		case errors.Is(err, config.ErrHandled):
 			return
+		case errors.Is(err, flag.ErrHelp):
+			// -h already printed the flags; asking for help is not a
+			// failure, and a non-zero exit from it breaks scripts that use
+			// it to check what a binary supports.
+			return
 		}
 		fmt.Fprintf(os.Stderr, "eye-of-lotus: %v\n", err)
 		os.Exit(1)
