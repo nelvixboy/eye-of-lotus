@@ -207,6 +207,28 @@ func Load(args []string) (Config, error) {
 		return cfg, err
 	}
 
+	// The two flags that answer a question about the program itself are
+	// handled before any file is read. Asking a binary what version it is
+	// must not depend on the configuration being present, readable by the
+	// caller, or valid: the config is mode 0600 and belongs to the service
+	// account, so a plain user asking -version would otherwise be told
+	// about a permission problem instead of a version.
+	if *showVersion {
+		return cfg, ErrShowVersion
+	}
+	if *genHash != "" {
+		hash, err := HashPassword(*genHash)
+		if err != nil {
+			return cfg, err
+		}
+		// The hash goes to stdout on its own so that a script can capture
+		// it with $(...); the guidance goes to stderr so that it does not
+		// end up inside the captured value.
+		fmt.Println(hash)
+		fmt.Fprintf(os.Stderr, "Paste this hash into the \"password\" key of %s.\n", *configPath)
+		return cfg, ErrHandled
+	}
+
 	// The file is optional only when it was not named explicitly.
 	explicit := false
 	fs.Visit(func(f *flag.Flag) {
@@ -244,23 +266,10 @@ func Load(args []string) (Config, error) {
 		}
 	})
 
-	if *showVersion {
-		return cfg, ErrShowVersion
-	}
+	// The health check needs the listen address, so it stays here rather
+	// than beside the other two.
 	if *healthcheck {
 		return cfg, runHealthcheck(cfg)
-	}
-	if *genHash != "" {
-		hash, err := HashPassword(*genHash)
-		if err != nil {
-			return cfg, err
-		}
-		// The hash goes to stdout on its own so that a script can capture
-		// it with $(...); the guidance goes to stderr so that it does not
-		// end up inside the captured value.
-		fmt.Println(hash)
-		fmt.Fprintf(os.Stderr, "Paste this hash into the \"password\" key of %s.\n", *configPath)
-		return cfg, ErrHandled
 	}
 	if *printConfig {
 		cfg.Password = redact(cfg.Password)
