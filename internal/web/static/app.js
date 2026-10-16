@@ -502,7 +502,13 @@
     var sd = svc.systemd || {};
     var dk = svc.docker || {};
 
-    var sdCard = card("systemd", sd.available ? ("v" + (sd.version || "?") + " \u00B7 " + sd.total + " units") : "unavailable",
+    // The version is only shown when there is one: a handful of
+    // distributions deny that query to unprivileged users while allowing
+    // the unit list, and "v?" in the corner reads like a fault.
+    var sdAside = sd.available
+      ? ((sd.version ? "v" + sd.version + " \u00B7 " : "") + sd.total + " units")
+      : "unavailable";
+    var sdCard = card("systemd", sdAside,
       !sd.available ? "" : (sd.failed ? "card--crit" : ""));
     if (!sd.available) {
       sdCard.appendChild(emptyNote(sd.error || "systemd is not reachable."));
@@ -530,7 +536,10 @@
     }
     grid.appendChild(sdCard);
 
-    var dkCard = card("Docker", dk.available ? ("v" + (dk.version || "?") + " \u00B7 " + dk.total + " containers") : "unavailable",
+    var dkAside = dk.available
+      ? ((dk.version ? "v" + dk.version + " \u00B7 " : "") + dk.total + " containers")
+      : "unavailable";
+    var dkCard = card("Docker", dkAside,
       !dk.available ? "" : (dk.unhealthy ? "card--crit" : ""));
     if (!dk.available) {
       dkCard.appendChild(emptyNote(dk.error || "the Docker daemon is not reachable."));
