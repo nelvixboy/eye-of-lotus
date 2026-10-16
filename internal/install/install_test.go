@@ -81,7 +81,7 @@ func TestIsLoopback(t *testing.T) {
 			t.Errorf("isLoopback(%q) = false, want true", in)
 		}
 	}
-	for _, in := range []string{"0.0.0.0:9110", "192.168.0.106:9110", "[::]:9110"} {
+	for _, in := range []string{"0.0.0.0:9110", "192.168.1.10:9110", "[::]:9110"} {
 		if isLoopback(in) {
 			t.Errorf("isLoopback(%q) = true, want false", in)
 		}
