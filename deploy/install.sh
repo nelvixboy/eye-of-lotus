@@ -51,6 +51,34 @@ die() { printf 'install: %s\n' "$*" >&2; exit 1; }
 step() { printf '\n==> %s\n' "$*"; }
 say() { printf '    %s\n' "$*"; }
 
+# has_listener reports whether anything is listening on a TCP port.
+#
+# It captures the listing instead of piping into `grep -q`, and that is not
+# a stylistic choice. grep -q exits at the first match, the writer dies of
+# SIGPIPE, and with `set -o pipefail` the whole pipeline reports failure, so
+# a test written that way quietly answers "nothing there" exactly when the
+# match succeeded. That mistake skipped stopping a running service once.
+has_listener() {
+	local listing
+	listing="$(ss -ltn 2>/dev/null || true)"
+	case "$listing" in
+	*":$1 "*) return 0 ;;
+	esac
+	return 1
+}
+
+# pid_of_listener prints the process id owning a listening TCP port, and
+# nothing when the port is free or belongs to another user.
+pid_of_listener() {
+	ss -ltnp 2>/dev/null | awk -v needle=":$1 " '
+		index($0, needle) {
+			if (match($0, /pid=[0-9]+/)) {
+				print substr($0, RSTART + 4, RLENGTH - 4)
+				exit
+			}
+		}'
+}
+
 usage() {
 	# Everything after the shebang that is still a comment is the help
 	# text, so the header can be edited without touching a line range.
@@ -106,8 +134,16 @@ if [ "$UNINSTALL" -eq 1 ]; then
 	# Only what this installer created is touched. The docker group, the
 	# firewall and anything else on the host are left exactly as they are,
 	# because this script cannot know who else depends on them.
-	if systemctl list-unit-files 2>/dev/null | grep -q "^${SERVICE}\.service"; then
-		systemctl disable --now "$SERVICE" >/dev/null 2>&1 || true
+	# The service is stopped before its unit file is removed. Once the file
+	# is gone systemd no longer knows how to stop the unit, while the
+	# process itself keeps running and holding the port.
+	#
+	# The unit file is what is checked, not systemctl's output: a test that
+	# piped into grep -q once answered "no such unit" while the unit was
+	# running, and skipped this whole block.
+	if [ -f "$UNIT_DST" ]; then
+		systemctl disable "$SERVICE" >/dev/null 2>&1 || true
+		systemctl stop "$SERVICE" >/dev/null 2>&1 || true
 		say "service stopped and disabled"
 	fi
 	rm -f "$UNIT_DST"
@@ -127,6 +163,27 @@ if [ "$UNINSTALL" -eq 1 ]; then
 		groupdel "$RUN_USER" 2>/dev/null || true
 		say "removed group ${RUN_USER}"
 	fi
+
+	# A panel started by an earlier install, or by hand, outlives the
+	# removal of its unit and keeps the port. Nothing else will ever stop
+	# it, and the next install would fail on the busy address, so it is
+	# dealt with here.
+	port="${LISTEN##*:}"
+	if has_listener "$port"; then
+		pid="$(pid_of_listener "$port")"
+		printf '\n'
+		say "something is still listening on port ${port}"
+		if [ -n "$pid" ] && kill "$pid" 2>/dev/null; then
+			sleep 1
+			say "stopped process ${pid}, which was left over from an earlier install"
+		fi
+		if has_listener "$port"; then
+			say "port ${port} is still busy; free it before installing again"
+		else
+			say "port ${port} is free now"
+		fi
+	fi
+
 	printf '\n'
 	say "The firewall was not touched, so any rule opened for the panel is"
 	say "still there. Check with: ufw status"
@@ -180,16 +237,24 @@ step "Container visibility"
 # permission that was never granted.
 if ! getent group docker >/dev/null 2>&1; then
 	say "no docker group on this host; nothing to do"
-elif id -nG "$RUN_USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
-	say "${RUN_USER} is already in the docker group"
-elif [ "$ADD_DOCKER_GROUP" -eq 0 ]; then
-	say "skipped by request: the panel will report Docker as unreachable"
 else
-	usermod -aG docker "$RUN_USER"
-	say "added ${RUN_USER} to the docker group"
-	say "note: membership of docker is root access to this host in practice."
-	say "      The panel only issues read requests, but the account could do"
-	say "      more. Pass --no-docker-group to leave it out."
+	user_groups="$(id -nG "$RUN_USER" 2>/dev/null || true)"
+	case " ${user_groups} " in
+	*" docker "*)
+		say "${RUN_USER} is already in the docker group"
+		;;
+	*)
+		if [ "$ADD_DOCKER_GROUP" -eq 0 ]; then
+			say "skipped by request: the panel will report Docker as unreachable"
+		else
+			usermod -aG docker "$RUN_USER"
+			say "added ${RUN_USER} to the docker group"
+			say "note: membership of docker is root access to this host in practice."
+			say "      The panel only issues read requests, but the account could do"
+			say "      more. Pass --no-docker-group to leave it out."
+		fi
+		;;
+	esac
 fi
 
 step "Directories"
@@ -267,9 +332,9 @@ step "Checking the port"
 # restarts in a loop. Catching it here turns a puzzling failure into a
 # sentence.
 PORT="${LISTEN##*:}"
-if command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":${PORT} "; then
+if command -v ss >/dev/null 2>&1 && has_listener "$PORT"; then
 	printf '\n' >&2
-	ss -ltnp 2>/dev/null | grep ":${PORT} " >&2 || true
+	ss -ltnp 2>/dev/null | awk -v n=":${PORT} " 'index($0, n)' >&2 || true
 	printf '\n' >&2
 	die "something is already listening on port ${PORT}; stop it and run this again (it may be a panel you started by hand earlier)"
 fi
