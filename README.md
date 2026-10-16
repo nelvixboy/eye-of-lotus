@@ -94,10 +94,14 @@ temporary database:
 
 ```bash
 arch=$(uname -m); case $arch in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; esac
-curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch" -o eye-of-lotus
-curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch.sha256" -o eye-of-lotus.sha256
-sha256sum -c eye-of-lotus.sha256
+curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch" -o "eye-of-lotus-linux-$arch"
+curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch.sha256" -o "eye-of-lotus-linux-$arch.sha256"
+
+# The checksum names the file it was made for, so check it before renaming.
+sha256sum -c "eye-of-lotus-linux-$arch.sha256"
+mv "eye-of-lotus-linux-$arch" eye-of-lotus
 chmod +x eye-of-lotus
+
 ./eye-of-lotus -demo
 ```
 
