@@ -86,6 +86,25 @@ go build -o eye-of-lotus ./cmd/eye-of-lotus
 заполняться файловая система: через несколько минут появляется
 предупреждение, а затем критичное - чтобы были видны оба уровня статуса.
 
+### Попробовать, ничего не устанавливая
+
+Есть готовые бинарники, поэтому чтобы посмотреть панель, тулчейн Go не
+нужен. Эта команда скачает нужный этой машине, проверит его и запустит
+синтетическую машину на переднем плане - без root, ничего не записывая за
+пределы временной базы:
+
+```bash
+arch=$(uname -m); case $arch in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; esac
+curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch" -o eye-of-lotus
+curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch.sha256" -o eye-of-lotus.sha256
+sha256sum -c eye-of-lotus.sha256
+chmod +x eye-of-lotus
+./eye-of-lotus -demo
+```
+
+Потом открыть http://127.0.0.1:9110. На хосте ничего не читается, пароль
+не нужен.
+
 ### Установка на сервер
 
 Программа устанавливает себя сама. Скопируй бинарник на машину, запусти и

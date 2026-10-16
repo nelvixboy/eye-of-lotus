@@ -113,8 +113,11 @@ jobs:
               -ldflags "-s -w -X main.version=${GITHUB_REF_NAME} -X github.com/nelvixboy/eye-of-lotus/internal/web.Version=${GITHUB_REF_NAME}" \
               -o "dist/eye-of-lotus-linux-$arch" ./cmd/eye-of-lotus
             # The checksum travels beside the binary, so somebody can check
-            # what they downloaded without trusting the download.
-            sha256sum "dist/eye-of-lotus-linux-$arch" > "dist/eye-of-lotus-linux-$arch.sha256"
+            # what they downloaded without trusting the download. It is
+            # written from inside dist so that it records a bare file name:
+            # a checksum naming the path it happened to be built at cannot be
+            # verified anywhere else, which is the whole point of it.
+            (cd dist && sha256sum "eye-of-lotus-linux-$arch" > "eye-of-lotus-linux-$arch.sha256")
           done
           ls -l dist
 

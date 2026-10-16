@@ -85,6 +85,25 @@ your host is read. After two minutes the synthetic machine starts filling a
 filesystem - a warning appears a few minutes later and a critical finding
 shortly after, so both levels of the status styling can be seen.
 
+### Try it without installing anything
+
+There are prebuilt binaries, so a Go toolchain is not needed to look at the
+panel. This downloads the one for this machine, checks it, and runs the
+synthetic machine in the foreground - no root, nothing written outside a
+temporary database:
+
+```bash
+arch=$(uname -m); case $arch in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; esac
+curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch" -o eye-of-lotus
+curl -fsSL "https://github.com/nelvixboy/eye-of-lotus/releases/latest/download/eye-of-lotus-linux-$arch.sha256" -o eye-of-lotus.sha256
+sha256sum -c eye-of-lotus.sha256
+chmod +x eye-of-lotus
+./eye-of-lotus -demo
+```
+
+Then open http://127.0.0.1:9110. Nothing on the host is read and no
+password is needed.
+
 ### Install on a server
 
 The program installs itself. Copy the binary to the machine, run it, and
