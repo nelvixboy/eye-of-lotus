@@ -53,6 +53,28 @@ func (c *Collector) collectNetwork(ctx context.Context, now time.Time) model.Net
 	return out
 }
 
+// virtualIfacePrefixes are the kernel side of container and virtual machine
+// networking. They are plumbing rather than hardware, and a host running
+// containers has dozens of them: on the machine this was written for, 25 of
+// 27 interfaces were Docker bridges and veth pairs.
+//
+// tun and tap are deliberately absent. A tunnel someone configured is a
+// real interface whose traffic they may well want to see.
+var virtualIfacePrefixes = []string{
+	"veth", "br-", "docker", "virbr", "vnet", "lxcbr", "lxdbr", "hassio", "vmnet",
+}
+
+// isVirtualIface reports whether an interface belongs to container or VM
+// plumbing rather than to a network someone plugged in.
+func isVirtualIface(name string) bool {
+	for _, prefix := range virtualIfacePrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // ifaces builds the per-interface list, including rates since the previous
 // sample.
 func (c *Collector) ifaces() []model.Iface {
@@ -69,12 +91,13 @@ func (c *Collector) ifaces() []model.Iface {
 	}
 	names := make([]string, 0, len(devs))
 	for name := range devs {
-		if name == "lo" && len(filter) == 0 {
-			// The loopback interface is noise on a busy host; it is still
-			// reported when explicitly requested.
-			continue
-		}
-		if len(filter) > 0 && !filter[name] {
+		if len(filter) > 0 {
+			if !filter[name] {
+				continue
+			}
+		} else if name == "lo" || isVirtualIface(name) {
+			// Loopback and container plumbing are noise on a busy host.
+			// Both are still reported when named in the configuration.
 			continue
 		}
 		names = append(names, name)

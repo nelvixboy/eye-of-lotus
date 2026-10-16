@@ -84,9 +84,6 @@ func (c *Collector) collectProcesses(now int64, memTotal uint64) ([]model.Proces
 			p.RSS = st.RSSPages * 4096
 		}
 		p.MemPct = proc.Percent(float64(p.RSS), float64(memTotal))
-		if uid, ok := c.root.ReadStatusUID(pid); ok {
-			p.User = users.name(uid)
-		}
 
 		// CPU is only meaningful once there is a previous sample and at
 		// least a little wall time between the two.
@@ -97,15 +94,6 @@ func (c *Collector) collectProcesses(now int64, memTotal uint64) ([]model.Proces
 				// 25%, the same convention top uses.
 				p.CPU = round2(cpuTicks / float64(totalDelta) * 100)
 			}
-		}
-		if len(p.Cmdline) == 0 {
-			p.Cmdline = c.root.ReadCmdline(pid)
-		}
-		if p.Cmdline == "" {
-			p.Cmdline = "[" + st.Comm + "]"
-		}
-		if len(p.Cmdline) > 300 {
-			p.Cmdline = p.Cmdline[:300] + "..."
 		}
 		out = append(out, p)
 	}
@@ -126,6 +114,27 @@ func (c *Collector) collectProcesses(now int64, memTotal uint64) ([]model.Proces
 		}
 		return out[i].PID < out[j].PID
 	})
+
+	// The command line and the owning user are two more file reads per
+	// process, and they are only needed for the handful that reach the
+	// snapshot. Reading them for all of them was most of the cost of a
+	// sample on a machine with a few hundred processes.
+	if keep := c.opts.TopProcs; keep > 0 && len(out) > keep {
+		out = out[:keep]
+	}
+	for i := range out {
+		cmd := c.root.ReadCmdline(out[i].PID)
+		if cmd == "" {
+			cmd = "[" + out[i].Name + "]"
+		}
+		if len(cmd) > 300 {
+			cmd = cmd[:300] + "..."
+		}
+		out[i].Cmdline = cmd
+		if uid, ok := c.root.ReadStatusUID(out[i].PID); ok {
+			out[i].User = users.name(uid)
+		}
+	}
 	return out, len(pids)
 }
 

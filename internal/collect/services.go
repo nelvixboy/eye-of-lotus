@@ -7,17 +7,33 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nelvixboy/eye-of-lotus/internal/docker"
 	"github.com/nelvixboy/eye-of-lotus/internal/model"
 	"github.com/nelvixboy/eye-of-lotus/internal/systemd"
 )
 
-// serviceState caches the expensive per-unit lookups. Listing units is
-// cheap, but fetching properties for each one is a round trip per unit,
-// and a server can easily have three hundred of them.
+// serviceState caches the expensive per-service lookups. Asking for the
+// list is cheap; asking for properties is a round trip per item, and a
+// server can easily have three hundred units and a few dozen containers.
 type serviceState struct {
 	mu        sync.Mutex
 	details   map[string]systemd.UnitDetail
 	detailsAt time.Time
+
+	// containers holds one inspect result per container id.
+	containers   map[string]docker.Container
+	containersAt time.Time
+
+	// The daemon version and the image count, which change about never.
+	dockerVersion   string
+	dockerImages    int
+	dockerSummaryAt time.Time
+
+	// containerList is the result of listing containers, which is far more
+	// expensive than it looks because the daemon gathers each container's
+	// state before answering.
+	containerList   []docker.Container
+	containerListAt time.Time
 }
 
 func newServiceState() *serviceState {
@@ -28,6 +44,27 @@ func newServiceState() *serviceState {
 // fetched again. State itself is always fresh; only the rarely changing
 // properties are cached.
 const detailTTL = 60 * time.Second
+
+// containerTTL is the same idea for containers, kept shorter because a
+// container can start failing at any moment and the health check is what
+// the panel reports about it.
+const containerTTL = 30 * time.Second
+
+// containerListTTL is how long the container list is reused. Listing
+// containers makes the daemon gather each container's state before it
+// answers, measured at about fifty milliseconds on a host with thirteen of
+// them, against half a millisecond for a single inspect of the same
+// container. Asking once every few seconds rather than on every sample is
+// most of the difference between a cheap sample and an expensive one, and
+// container state that is a few seconds old is still container state.
+const containerListTTL = 5 * time.Second
+
+// dockerSummaryTTL is how long the daemon version and the image count are
+// reused. Both change about never, and asking for them is expensive: the
+// info endpoint makes the daemon gather statistics about images, containers
+// and drivers before it answers. It was the single most expensive call a
+// sample made, and it was being made for one number.
+const dockerSummaryTTL = 60 * time.Second
 
 // collectServices gathers systemd units and Docker containers.
 func (c *Collector) collectServices(ctx context.Context) model.Services {
@@ -203,18 +240,14 @@ func (c *Collector) collectDocker(ctx context.Context) model.DockerInfo {
 	}
 	info.Available = true
 
-	if v, err := client.Version(ctx); err == nil {
-		info.Version = v
-	}
-	if di, err := client.Info(ctx); err == nil {
-		info.Images = di.Images
-	}
-	containers, err := client.Containers(ctx)
+	info.Version, info.Images = c.dockerSummary(ctx, client)
+	containers, err := c.containerList(ctx, client)
 	if err != nil {
 		info.Available = false
 		info.Error = err.Error()
 		return info
 	}
+	details := c.containerDetails(ctx, client, containers)
 
 	info.Items = make([]model.Service, 0, len(containers))
 	for _, ct := range containers {
@@ -239,21 +272,17 @@ func (c *Collector) collectDocker(ctx context.Context) model.DockerInfo {
 		if svc.Status == "dead" || svc.Status == "paused" {
 			svc.Problem = "container state is " + svc.Status
 		}
-		// Only containers that are not plainly healthy are inspected in
-		// detail: the call is one HTTP round trip per container.
-		if svc.Status != "running" || info.Total <= 64 {
-			if detail, err := client.Inspect(ctx, ct.ID); err == nil {
-				svc.Health = detail.Health
-				svc.Restarts = detail.RestartCount
-				if detail.StartedAt != "" {
-					if t, err := time.Parse(time.RFC3339Nano, detail.StartedAt); err == nil {
-						svc.Started = t.UnixMilli()
-					}
+		if detail, ok := details[ct.ID]; ok {
+			svc.Health = detail.Health
+			svc.Restarts = detail.RestartCount
+			if detail.StartedAt != "" {
+				if t, err := time.Parse(time.RFC3339Nano, detail.StartedAt); err == nil {
+					svc.Started = t.UnixMilli()
 				}
-				if detail.Health == "unhealthy" {
-					svc.Problem = "the container health check is failing"
-					info.Unhealthy++
-				}
+			}
+			if detail.Health == "unhealthy" {
+				svc.Problem = "the container health check is failing"
+				info.Unhealthy++
 			}
 		}
 		info.Items = append(info.Items, svc)
@@ -302,4 +331,93 @@ func explainDocker(err error, socket string) string {
 	default:
 		return "cannot reach the Docker daemon at " + socket + ": " + msg
 	}
+}
+
+// containerDetails returns one inspect result per container, refreshing the
+// whole set when it has gone stale.
+//
+// The list endpoint is cheap and is asked on every sample, so the container
+// states on screen are always current. The detail endpoint is a round trip
+// each, and on a host with a dozen containers it was the single most
+// expensive thing a sample did: about ten milliseconds per container, every
+// two seconds, for numbers that change far more slowly than that.
+func (c *Collector) containerDetails(ctx context.Context, client *docker.Client, containers []docker.Container) map[string]docker.Container {
+	st := c.services
+	st.mu.Lock()
+	cached := st.containers
+	fresh := cached != nil &&
+		len(cached) == len(containers) &&
+		c.opts.Now().Sub(st.containersAt) < containerTTL
+	st.mu.Unlock()
+	if fresh {
+		return cached
+	}
+
+	out := make(map[string]docker.Container, len(containers))
+	for _, ct := range containers {
+		if ctx.Err() != nil {
+			break
+		}
+		d, err := client.Inspect(ctx, ct.ID)
+		if err != nil {
+			continue
+		}
+		out[ct.ID] = d
+	}
+
+	st.mu.Lock()
+	st.containers = out
+	st.containersAt = c.opts.Now()
+	st.mu.Unlock()
+	return out
+}
+
+// dockerSummary returns the daemon version and the image count, asking the
+// daemon only when the cached answer has gone stale.
+func (c *Collector) dockerSummary(ctx context.Context, client *docker.Client) (version string, images int) {
+	st := c.services
+	st.mu.Lock()
+	if !st.dockerSummaryAt.IsZero() && c.opts.Now().Sub(st.dockerSummaryAt) < dockerSummaryTTL {
+		version, images = st.dockerVersion, st.dockerImages
+		st.mu.Unlock()
+		return version, images
+	}
+	st.mu.Unlock()
+
+	if v, err := client.Version(ctx); err == nil {
+		version = v
+	}
+	if di, err := client.Info(ctx); err == nil {
+		images = di.Images
+	}
+
+	st.mu.Lock()
+	st.dockerVersion, st.dockerImages = version, images
+	st.dockerSummaryAt = c.opts.Now()
+	st.mu.Unlock()
+	return version, images
+}
+
+// containerList returns the containers, asking the daemon only when the
+// cached answer has gone stale.
+func (c *Collector) containerList(ctx context.Context, client *docker.Client) ([]docker.Container, error) {
+	st := c.services
+	st.mu.Lock()
+	if !st.containerListAt.IsZero() && c.opts.Now().Sub(st.containerListAt) < containerListTTL {
+		cached := st.containerList
+		st.mu.Unlock()
+		return cached, nil
+	}
+	st.mu.Unlock()
+
+	list, err := client.Containers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	st.mu.Lock()
+	st.containerList = list
+	st.containerListAt = c.opts.Now()
+	st.mu.Unlock()
+	return list, nil
 }

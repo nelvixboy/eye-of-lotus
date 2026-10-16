@@ -1,29 +1,53 @@
-// Command probe exercises the D-Bus client and the systemd wrapper the way
-// the panel uses them, and prints what each step returned.
+// Command probe times a full collection with the integrations switched on,
+// reporting the best and worst sample. The best is the steady state; the
+// worst is a sample that had to refresh a cache.
 package main
 
 import (
+	"context"
 	"fmt"
+	"time"
 
+	"github.com/nelvixboy/eye-of-lotus/internal/collect"
+	"github.com/nelvixboy/eye-of-lotus/internal/docker"
 	"github.com/nelvixboy/eye-of-lotus/internal/systemd"
 )
 
-func main() {
-	c := systemd.New("")
-	fmt.Println("== exactly the panel's path ==")
-	fmt.Printf("Connect:  %v\n", c.Connect())
-	fmt.Printf("Version:  %q  (denied by policy on many distributions)\n", c.Version())
-
-	units, err := c.ListUnits()
-	fmt.Printf("ListUnits: err=%v units=%d\n", err, len(units))
-	if err == nil {
-		for i, u := range units {
-			if i >= 5 {
-				break
-			}
-			fmt.Printf("   %s %s/%s\n", u.Name, u.ActiveState, u.SubState)
-		}
-		d, derr := c.Detail(units[0].Path)
-		fmt.Printf("Detail:    err=%v enabled=%q restarts=%d\n", derr, d.UnitFileState, d.NRestarts)
+func timeIt(label string, opts collect.Options, runs int) {
+	c, err := collect.New(opts)
+	if err != nil {
+		fmt.Println(label, "error:", err)
+		return
 	}
+	ctx := context.Background()
+	best, worst := time.Hour, time.Duration(0)
+	total := time.Duration(0)
+	for i := 0; i < runs; i++ {
+		start := time.Now()
+		snap := c.Collect(ctx)
+		d := time.Since(start)
+		total += d
+		if d < best {
+			best = d
+		}
+		if d > worst {
+			worst = d
+		}
+		if i == runs-1 {
+			fmt.Printf("  %-22s лучший %-9v средний %-9v худший %-9v (сокетов %d, юнитов %d, контейнеров %d)\n",
+				label, best.Round(time.Millisecond), (total / time.Duration(runs)).Round(time.Millisecond),
+				worst.Round(time.Millisecond), len(snap.Net.Listening), snap.Services.Systemd.Total,
+				snap.Services.Docker.Total)
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func main() {
+	base := collect.Options{TopProcs: 12}
+	fmt.Println("=== полный сбор, как в панели ===")
+	full := base
+	full.Systemd = systemd.New("")
+	full.Docker = docker.New("")
+	timeIt("systemd + docker", full, 8)
 }

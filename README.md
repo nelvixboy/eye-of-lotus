@@ -23,6 +23,10 @@ about it. It reads `/proc`, `/sys`, the systemd bus and the Docker socket.
 It never writes anything except its own history database, and the HTTP API
 has no endpoint that can change the state of the machine.
 
+![The panel, on a machine with nothing wrong](docs/panel.webp)
+
+![The way in](docs/login.webp)
+
 ## What it shows
 
 | Section | Contents |

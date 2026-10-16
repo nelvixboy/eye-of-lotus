@@ -116,16 +116,22 @@
     return dd;
   }
 
-  function bar(value, warn, crit) {
+  // bar draws a flat meter. Most of them carry a percentage and need no
+  // ceiling; the ones that do not name one, so that a full bar keeps
+  // meaning "at the limit" rather than "more than one hundred of
+  // something". Collection time is measured in milliseconds, and without a
+  // ceiling every sample slower than 100 ms filled the bar completely.
+  function bar(value, warn, crit, ceiling) {
     var sev = severityOfRatio(value, warn, crit);
     var wrap = el("div", "bar" + (sev === "warn" ? " bar--warn" : sev === "crit" ? " bar--crit" : ""));
     var fill = el("div", "bar__fill");
-    fill.style.width = Math.max(0, Math.min(100, value)) + "%";
+    var span = ceiling > 0 ? ceiling : 100;
+    fill.style.width = Math.max(0, Math.min(100, value / span * 100)) + "%";
     wrap.appendChild(fill);
     return wrap;
   }
 
-  function tile(label, value, sub, ratio, warn, crit) {
+  function tile(label, value, sub, ratio, warn, crit, ceiling) {
     var c = card(null, null, "tile");
     c.appendChild(el("div", "tile__label", label));
     var v = el("div", "tile__value");
@@ -136,7 +142,7 @@
       v.appendChild(s);
     }
     c.appendChild(v);
-    if (ratio !== undefined && ratio !== null) c.appendChild(bar(ratio, warn, crit));
+    if (ratio !== undefined && ratio !== null) c.appendChild(bar(ratio, warn, crit, ceiling));
     return c;
   }
 
@@ -275,7 +281,9 @@
 
     grid.appendChild(tile("Uptime", duration(snap.uptime), "since boot", null));
     grid.appendChild(tile("Processes", count(snap.total_procs), "running", null));
-    grid.appendChild(tile("Collection", num(snap.collect_ms, 1) + " ms", "per sample", snap.collect_ms, 250, 800));
+    // The ceiling is the critical threshold, so the bar reads as a share of
+    // the budget rather than as a raw number of milliseconds.
+    grid.appendChild(tile("Collection", num(snap.collect_ms, 1) + " ms", "per sample", snap.collect_ms, 250, 800, 800));
 
     var worst = issues.length && issues[0].severity === "crit" ? "crit" :
       (issues.length && issues[0].severity === "warn" ? "warn" : "ok");
