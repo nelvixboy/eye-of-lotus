@@ -62,6 +62,14 @@ func (c *Client) Available(ctx context.Context) bool {
 	return c.get(ctx, "/_ping", nil) == nil
 }
 
+// Check reports whether the daemon answers, and returns the underlying
+// error when it does not. A socket that is missing and a socket the caller
+// may not open are different problems, and a plain boolean flattens them
+// into one that is easy to misread.
+func (c *Client) Check(ctx context.Context) error {
+	return c.get(ctx, "/_ping", nil)
+}
+
 // Version returns the daemon version string, for example "24.0.7".
 func (c *Client) Version(ctx context.Context) (string, error) {
 	var v struct {

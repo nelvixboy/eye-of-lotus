@@ -124,6 +124,17 @@ The panel listens on `127.0.0.1:9110` by default. Reach it through an SSH
 tunnel (`ssh -L 9110:127.0.0.1:9110 server`) or a reverse proxy - both are
 safer than exposing it, even with a password.
 
+To serve the local network instead, install with `-l 0.0.0.0:9110`, or run
+the installer again with that flag to move an existing panel. The login is
+throttled and the API is read-only, but over plain HTTP the session cookie
+travels in the clear, so keep it inside a network you trust or put a
+certificate in front of it.
+
+Seeing the host's containers needs the account the panel runs as to be in
+the `docker` group, because the daemon socket is owned by `root:docker`.
+The installer adds it for you, and `--no-docker-group` skips that, at the
+cost of the container section reporting an unreachable daemon.
+
 ### Docker
 
 ```bash

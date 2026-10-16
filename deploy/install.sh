@@ -8,23 +8,29 @@
 #   sudo ./install.sh -b ./eye-of-lotus
 #
 # It is safe to run again: the binary and the unit are replaced, an
-# existing configuration is left alone. That makes the same command the
-# upgrade path.
+# existing configuration is left alone except for the listen address, which
+# is rewritten when -l is given. That makes the same command both the
+# upgrade path and the way to move the panel onto another address.
 #
 # Options:
-#   -b, --binary PATH   the eye-of-lotus binary to install (required)
-#   -l, --listen ADDR   address to bind (default 127.0.0.1:9110)
-#       --dry-run       show what would be done, change nothing
-#   -h, --help          this message
+#   -b, --binary PATH     the eye-of-lotus binary to install (required)
+#   -l, --listen ADDR     address to bind (default 127.0.0.1:9110). Use
+#                         0.0.0.0:9110 to serve the whole local network.
+#       --no-docker-group leave the service account out of the docker
+#                         group, at the cost of container visibility
+#       --dry-run         show what would be done, change nothing
+#   -h, --help            this message
 #
 # Environment:
-#   EOL_PASSWORD        set the password without a prompt (for automation)
+#   EOL_PASSWORD          set the password without a prompt (for automation)
 #
 set -euo pipefail
 
 BIN_SRC=""
 LISTEN="127.0.0.1:9110"
+LISTEN_SET=0
 DRY_RUN=0
+ADD_DOCKER_GROUP=1
 
 BIN_DST="/usr/local/bin/eye-of-lotus"
 CONF_DIR="/etc/eye-of-lotus"
@@ -56,7 +62,12 @@ while [ $# -gt 0 ]; do
 		;;
 	-l | --listen)
 		LISTEN="${2:-}"
+		LISTEN_SET=1
 		shift 2
+		;;
+	--no-docker-group)
+		ADD_DOCKER_GROUP=0
+		shift
 		;;
 	--dry-run)
 		DRY_RUN=1
@@ -116,6 +127,25 @@ else
 	say "created user ${RUN_USER}"
 fi
 
+step "Container visibility"
+# The Docker API socket is owned by root:docker, and reading it needs group
+# membership. Without this the panel runs perfectly well and reports the
+# container section as unreachable, which reads like a fault rather than a
+# permission that was never granted.
+if ! getent group docker >/dev/null 2>&1; then
+	say "no docker group on this host; nothing to do"
+elif id -nG "$RUN_USER" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
+	say "${RUN_USER} is already in the docker group"
+elif [ "$ADD_DOCKER_GROUP" -eq 0 ]; then
+	say "skipped by request: the panel will report Docker as unreachable"
+else
+	usermod -aG docker "$RUN_USER"
+	say "added ${RUN_USER} to the docker group"
+	say "note: membership of docker is root access to this host in practice."
+	say "      The panel only issues read requests, but the account could do"
+	say "      more. Pass --no-docker-group to leave it out."
+fi
+
 step "Directories"
 install -d -m 0755 -o "$RUN_USER" -g "$RUN_USER" "$CONF_DIR"
 install -d -m 0750 -o "$RUN_USER" -g "$RUN_USER" "$DATA_DIR"
@@ -130,8 +160,21 @@ say "installed ${BIN_DST}"
 
 step "Configuration"
 if [ -f "$CONF" ]; then
-	say "${CONF} exists; left untouched"
-	say "delete it and run again if you want to set a new password"
+	say "${CONF} exists; password and history are left untouched"
+	if [ "$LISTEN_SET" -eq 1 ]; then
+		current="$(sed -n 's/.*"listen"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$CONF" | head -1)"
+		if [ -z "$current" ]; then
+			say "no listen key found in ${CONF}; set it by hand"
+		elif [ "$current" = "$LISTEN" ]; then
+			say "listen is already ${LISTEN}"
+		else
+			cp -a "$CONF" "${CONF}.bak"
+			sed -i "s|\"listen\"[[:space:]]*:[[:space:]]*\"[^\"]*\"|\"listen\": \"${LISTEN}\"|" "$CONF"
+			say "listen changed from ${current} to ${LISTEN} (old file kept as ${CONF}.bak)"
+		fi
+	else
+		say "pass -l ADDR to change the address it listens on"
+	fi
 else
 	if [ -n "${EOL_PASSWORD:-}" ]; then
 		password="$EOL_PASSWORD"
@@ -211,6 +254,25 @@ say "panel:   http://${LISTEN}"
 say "logs:    journalctl -u ${SERVICE} -f"
 say "restart: systemctl restart ${SERVICE}"
 printf '\n'
-say "If the panel is bound to 127.0.0.1 as above, reach it with an SSH"
-say "tunnel:  ssh -L 9110:127.0.0.1:9110 ${SUDO_USER:-$(whoami)}@this-host"
+
+case "$LISTEN" in
+127.0.0.1:* | localhost:* | "[::1]:"*)
+	say "The panel is bound to the loopback address, so only this machine"
+	say "can reach it. Either tunnel in:"
+	say "  ssh -L 9110:127.0.0.1:9110 ${SUDO_USER:-$(whoami)}@this-host"
+	say "or serve the local network instead, by running this installer again"
+	say "with -l 0.0.0.0:${LISTEN##*:}"
+	;;
+*)
+	host="$(hostname -I 2>/dev/null | awk '{print $1}')"
+	say "The panel is reachable from the network at:"
+	if [ -n "$host" ]; then
+		say "  http://${host}:${LISTEN##*:}"
+	fi
+	say "Anyone who can reach that port sees a login prompt, and the login is"
+	say "throttled, but the session cookie travels in the clear over plain"
+	say "HTTP. Keep it inside a network you trust, or put a reverse proxy"
+	say "with a certificate in front of it and set trust_proxy to true."
+	;;
+esac
 printf '\n'

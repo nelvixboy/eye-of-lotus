@@ -197,8 +197,8 @@ func (c *Collector) collectDocker(ctx context.Context) model.DockerInfo {
 		info.Error = "docker support is disabled in the configuration"
 		return info
 	}
-	if !client.Available(ctx) {
-		info.Error = "the Docker daemon is not reachable at " + client.Socket()
+	if err := client.Check(ctx); err != nil {
+		info.Error = explainDocker(err, client.Socket())
 		return info
 	}
 	info.Available = true
@@ -283,5 +283,23 @@ func normalizeContainerState(state string) string {
 		return "removing"
 	default:
 		return "unknown"
+	}
+}
+
+// explainDocker turns a connection failure into the thing that is actually
+// wrong. "Not reachable" is technically true of a permission problem and
+// sends the reader looking in the wrong place: the socket is there, the
+// daemon is running, and this process simply may not open it. That is the
+// default state of a fresh install, because the service account is not in
+// the docker group until somebody puts it there.
+func explainDocker(err error, socket string) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "no such file or directory"):
+		return "the Docker daemon is not running: nothing is listening on " + socket
+	case strings.Contains(msg, "permission denied"):
+		return "permission denied on " + socket + ": the panel runs as a user that may not open it. Add that user to the docker group with `usermod -aG docker <user>` and restart the service"
+	default:
+		return "cannot reach the Docker daemon at " + socket + ": " + msg
 	}
 }
