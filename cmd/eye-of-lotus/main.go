@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net"
@@ -23,6 +24,7 @@ import (
 	"github.com/nelvixboy/eye-of-lotus/internal/collect"
 	"github.com/nelvixboy/eye-of-lotus/internal/config"
 	"github.com/nelvixboy/eye-of-lotus/internal/docker"
+	"github.com/nelvixboy/eye-of-lotus/internal/install"
 	"github.com/nelvixboy/eye-of-lotus/internal/model"
 	"github.com/nelvixboy/eye-of-lotus/internal/store"
 	"github.com/nelvixboy/eye-of-lotus/internal/systemd"
@@ -33,6 +35,17 @@ import (
 var version = "dev"
 
 func main() {
+	// The two things the program does before it is a service rather than
+	// after are handled first, and by their own flag set: installing writes
+	// the configuration file that every other path reads, so it cannot wait
+	// on one being there.
+	if installMode, uninstallMode := installRequested(os.Args[1:]); installMode || uninstallMode {
+		if err := runInstaller(installMode); err != nil {
+			fmt.Fprintf(os.Stderr, "eye-of-lotus: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		switch {
 		case errors.Is(err, config.ErrShowVersion):
@@ -44,6 +57,54 @@ func main() {
 		fmt.Fprintf(os.Stderr, "eye-of-lotus: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// installRequested looks for the two flags before anything is parsed, so
+// that their presence decides which flag set gets the arguments.
+func installRequested(args []string) (install, uninstall bool) {
+	for _, arg := range args {
+		switch strings.TrimLeft(arg, "-") {
+		case "install":
+			install = true
+		case "uninstall":
+			uninstall = true
+		}
+	}
+	return install, uninstall
+}
+
+// runInstaller parses the installer's own flags and does the work.
+func runInstaller(asInstall bool) error {
+	fs := flag.NewFlagSet("eye-of-lotus", flag.ContinueOnError)
+	// The two mode flags are declared here as well, because this set is
+	// handed the same arguments that chose it: parsing would otherwise
+	// reject the very flag that got us here.
+	fs.Bool("install", false, "install as a service and exit")
+	fs.Bool("uninstall", false, "remove the service and exit")
+	listen := fs.String("listen", "", "address to bind, for example 0.0.0.0:9110")
+	noDockerGroup := fs.Bool("no-docker-group", false, "leave the service account out of the docker group")
+	noFirewall := fs.Bool("no-firewall", false, "do not open the firewall")
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			// -h already printed the flags; asking for help is not a
+			// failure.
+			return nil
+		}
+		return err
+	}
+
+	opts := install.Options{
+		Version:       version,
+		Listen:        *listen,
+		ListenSet:     *listen != "",
+		Password:      os.Getenv("EOL_PASSWORD"),
+		NoDockerGroup: *noDockerGroup,
+		NoFirewall:    *noFirewall,
+	}
+	if asInstall {
+		return install.Run(opts)
+	}
+	return install.RunUninstall(opts)
 }
 
 func run() error {

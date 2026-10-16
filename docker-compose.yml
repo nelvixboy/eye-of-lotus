@@ -16,7 +16,7 @@
 #   * Docker containers: available if you mount the daemon socket below
 #   * systemd units: not available, because reaching the host's systemd
 #     needs the host's D-Bus socket and its policy. Install the panel
-#     natively (see deploy/eye-of-lotus.service) for the full picture.
+#     natively, by running the binary with -install, for the full picture.
 
 services:
   eye-of-lotus:

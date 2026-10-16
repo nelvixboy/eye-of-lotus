@@ -87,57 +87,41 @@ shortly after, so both levels of the status styling can be seen.
 
 ### Install on a server
 
-There is an installer that does the five steps below in one command:
+The program installs itself. Copy the binary to the machine, run it, and
+answer one question:
 
 ```bash
-CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o eye-of-lotus ./cmd/eye-of-lotus
-sudo deploy/install.sh -b ./eye-of-lotus
+sudo ./eye-of-lotus -install -listen 0.0.0.0:9110
 ```
 
-It creates the service account, asks for the password and stores its hash,
-writes the configuration, installs the unit and starts the service. Running
-it again is the upgrade path: the binary and the unit are replaced, an
-existing configuration is left alone.
+That is the whole procedure. It works out how the host starts a service,
+writes the definition for the manager it finds, creates the service account,
+asks for the panel password and stores only its hash, creates the data
+directory, opens the firewall and starts the service. There is no shell
+script beside it and no unit file to copy: the definition is in the binary,
+so it cannot drift from the paths in the code.
 
-To do the same by hand:
+Running the same command again is the upgrade path. The binary and the
+definition are replaced, and an existing configuration is left completely
+alone unless `-listen` is given, in which case that one key is rewritten and
+the old file kept as `config.json.bak`.
 
-```bash
-# 1. Build (Go 1.26 or newer, no other toolchain needed)
-CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o eye-of-lotus ./cmd/eye-of-lotus
+| Flag | Effect |
+|---|---|
+| `-listen ADDR` | address to bind, `0.0.0.0:9110` to serve the local network |
+| `-no-docker-group` | leave the service account out of the docker group |
+| `-no-firewall` | do not open the port |
+| `-uninstall` | remove everything it installed |
 
-# 2. Create the service account and directories
-sudo useradd --system --home /var/lib/eye-of-lotus --shell /usr/sbin/nologin eye-of-lotus
-sudo install -d -o eye-of-lotus -g eye-of-lotus /var/lib/eye-of-lotus /etc/eye-of-lotus
+The password is asked for on the terminal with echoing off, or taken from
+`EOL_PASSWORD` when there is no terminal to ask on.
 
-# 3. Choose a password (this prints a hash, not the password)
-./eye-of-lotus -hash-password 'a long passphrase'
-
-# 4. Write the configuration
-sudo install -o eye-of-lotus -g eye-of-lotus -m 0600 \
-  deploy/config.example.json /etc/eye-of-lotus/config.json
-sudoedit /etc/eye-of-lotus/config.json    # paste the hash, adjust the rest
-
-# 5. Install and start
-sudo install -m 0755 eye-of-lotus /usr/local/bin/eye-of-lotus
-sudo install -m 0644 deploy/eye-of-lotus.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now eye-of-lotus
-```
-
-The panel listens on `127.0.0.1:9110` by default. Reach it through an SSH
-tunnel (`ssh -L 9110:127.0.0.1:9110 server`) or a reverse proxy - both are
-safer than exposing it, even with a password.
-
-To serve the local network instead, install with `-l 0.0.0.0:9110`, or run
-the installer again with that flag to move an existing panel. The login is
+By default the panel listens on `127.0.0.1:9110`, which only this machine
+can reach. Either tunnel in with `ssh -L 9110:127.0.0.1:9110 this-host`, or
+install with `-listen 0.0.0.0:9110` to serve the local network. The login is
 throttled and the API is read-only, but over plain HTTP the session cookie
 travels in the clear, so keep it inside a network you trust or put a
 certificate in front of it.
-
-Seeing the host's containers needs the account the panel runs as to be in
-the `docker` group, because the daemon socket is owned by `root:docker`.
-The installer adds it for you, and `--no-docker-group` skips that, at the
-cost of the container section reporting an unreachable daemon.
 
 ### What the installer does
 
@@ -153,8 +137,8 @@ It runs as root, and it is worth knowing what for before handing it that:
 | Opens the firewall, when one is active | one rule for the local interface and one for the container networks, and nothing beyond them |
 | Enables and starts the service | systemd |
 
-It touches nothing else. `--no-docker-group` and `--no-firewall` skip those
-two steps, and `--uninstall` reverses everything it did.
+It touches nothing else. `-no-docker-group` and `-no-firewall` skip those two steps, and
+`-uninstall` reverses everything it did.
 
 The container network rule surprises people, so it is worth a line of its
 own. A reverse proxy running in Docker reaches the panel from its bridge
