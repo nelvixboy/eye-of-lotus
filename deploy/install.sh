@@ -363,12 +363,22 @@ step "Checking the port"
 # service from the outside: the unit starts, exits with status 1, and
 # restarts in a loop. Catching it here turns a puzzling failure into a
 # sentence.
+#
+# The panel's own service holding the port is not that case. It is what an
+# upgrade always finds, because the service is still running on the binary
+# that is being replaced, so it is stopped here rather than treated as a
+# conflict. Anything else on the port still stops the install.
 PORT="${LISTEN##*:}"
+if has_listener "$PORT" && systemctl is-active --quiet "$SERVICE" 2>/dev/null; then
+	say "the running panel holds port ${PORT}; stopping it for the upgrade"
+	systemctl stop "$SERVICE" >/dev/null 2>&1 || true
+	sleep 1
+fi
 if command -v ss >/dev/null 2>&1 && has_listener "$PORT"; then
 	printf '\n' >&2
 	ss -ltnp 2>/dev/null | awk -v n=":${PORT} " 'index($0, n)' >&2 || true
 	printf '\n' >&2
-	die "something is already listening on port ${PORT}; stop it and run this again (it may be a panel you started by hand earlier)"
+	die "something else is already listening on port ${PORT}; stop it and run this again"
 fi
 say "port ${PORT} is free"
 
