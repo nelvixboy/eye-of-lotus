@@ -206,10 +206,23 @@ go run ./cmd/eye-of-lotus -demo -log-level debug
 The collector tests build a fake `/proc` and `/sys` tree and assert that
 the parsers and the issue engine behave: that a 93%-full memory reading
 becomes a critical finding, that an exposed port 2375 is flagged, that a
-process command line containing parentheses still parses. The systemd and
-Docker collectors cannot be exercised without those daemons present; they
-degrade into an explanatory finding instead of failing, which is what the
-tests assert.
+process command line containing parentheses still parses.
+
+Two things are worth knowing when the Services section is not what you
+expect. The panel talks to the systemd bus directly rather than shelling
+out, and every client must introduce itself to the bus before anything
+else; `cmd/probe` exists to check that path and to show what the bus says
+at each step:
+
+```bash
+go run ./cmd/probe
+```
+
+And some distributions deny the systemd version query to unprivileged
+users while allowing the unit list, so a blank version with a full list of
+units is normal and not a fault. When systemd or Docker really is out of
+reach, the section says so and explains why instead of showing an empty
+list.
 
 ## Authors
 
