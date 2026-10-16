@@ -14,6 +14,19 @@ func (d *decoder) unmarshalValue(sig string, dst any) error {
 	if len(sig) == 0 {
 		return errors.New("dbus: empty signature")
 	}
+	// An empty interface can hold any value, and the concrete type is only
+	// known once the signature has been read. Handling it here matters
+	// more than it looks: every header field is a variant, so without this
+	// the client would read a reply and find no member, no serial and no
+	// error name in it.
+	if p, ok := dst.(*any); ok {
+		value, err := d.decodeAny(sig)
+		if err != nil {
+			return err
+		}
+		*p = value
+		return nil
+	}
 	switch sig[0] {
 	case 'a':
 		return d.unmarshalArray(sig, dst)
@@ -411,4 +424,120 @@ func setFloat(dst any, v float64) {
 	if p, ok := dst.(*float64); ok {
 		*p = v
 	}
+}
+
+// decodeAny decodes a value of any signature into an interface. Variants
+// need it, because their contents are only known once the signature on the
+// wire has been read.
+func (d *decoder) decodeAny(sig string) (any, error) {
+	if len(sig) == 0 {
+		return nil, errors.New("dbus: empty signature")
+	}
+	// A variant inside a variant is unwrapped to whatever it ultimately
+	// carries.
+	for sig[0] == 'v' {
+		inner, err := d.readSignature()
+		if err != nil {
+			return nil, err
+		}
+		if inner == "" {
+			return nil, errors.New("dbus: a variant carried no type")
+		}
+		sig = inner
+	}
+
+	switch sig[0] {
+	case 'y':
+		var v uint8
+		return v, d.unmarshalValue(sig, &v)
+	case 'b':
+		var v bool
+		return v, d.unmarshalValue(sig, &v)
+	case 'n':
+		var v int16
+		return v, d.unmarshalValue(sig, &v)
+	case 'q':
+		var v uint16
+		return v, d.unmarshalValue(sig, &v)
+	case 'i':
+		var v int32
+		return v, d.unmarshalValue(sig, &v)
+	case 'u':
+		var v uint32
+		return v, d.unmarshalValue(sig, &v)
+	case 'x':
+		var v int64
+		return v, d.unmarshalValue(sig, &v)
+	case 't':
+		var v uint64
+		return v, d.unmarshalValue(sig, &v)
+	case 'd':
+		var v float64
+		return v, d.unmarshalValue(sig, &v)
+	case 's':
+		var v string
+		return v, d.unmarshalValue(sig, &v)
+	case 'o':
+		var v ObjectPath
+		return v, d.unmarshalValue(sig, &v)
+	case 'g':
+		var v Signature
+		return v, d.unmarshalValue(sig, &v)
+	case 'a':
+		return d.decodeAnyArray(sig)
+	case '(':
+		return d.decodeAnyMembers(sig)
+	case '{':
+		return d.decodeAnyMembers(sig)
+	}
+	return nil, fmt.Errorf("dbus: cannot decode type %q into an interface", string(sig[0]))
+}
+
+// decodeAnyArray decodes an array whose element type is not known ahead of
+// time into a slice of interfaces.
+func (d *decoder) decodeAnyArray(sig string) (any, error) {
+	elem, _, err := elementSig(sig)
+	if err != nil {
+		return nil, err
+	}
+	n, err := d.readUint32()
+	if err != nil {
+		return nil, err
+	}
+	if elem[0] == '(' || elem[0] == '{' {
+		if err := d.align(8); err != nil {
+			return nil, err
+		}
+	}
+	end := d.pos + int(n)
+	if end > len(d.buf) {
+		return nil, errors.New("dbus: array length runs past the end of the message")
+	}
+	items := make([]any, 0, 4)
+	for d.pos < end {
+		item, err := d.decodeAny(elem)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// decodeAnyMembers decodes a struct or a dict entry into a slice of
+// interfaces, one per member.
+func (d *decoder) decodeAnyMembers(sig string) (any, error) {
+	if err := d.align(8); err != nil {
+		return nil, err
+	}
+	members := splitStructMembers(sig[1 : len(sig)-1])
+	out := make([]any, 0, len(members))
+	for _, m := range members {
+		value, err := d.decodeAny(m)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, value)
+	}
+	return out, nil
 }

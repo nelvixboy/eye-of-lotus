@@ -39,7 +39,10 @@ func (c *Collector) collectServices(ctx context.Context) model.Services {
 
 // collectSystemd lists units and normalises their state.
 func (c *Collector) collectSystemd(ctx context.Context) model.SystemdInfo {
-	info := model.SystemdInfo{}
+	// The unit list starts empty rather than nil so that the JSON always
+	// carries an array. A null there would make every client null-check a
+	// field it is entitled to iterate.
+	info := model.SystemdInfo{Units: []model.Service{}}
 	client := c.opts.Systemd
 	if client == nil {
 		info.Error = "systemd support is disabled in the configuration"
@@ -187,7 +190,8 @@ func (c *Collector) unitDetails(ctx context.Context, client *systemd.Client, uni
 
 // collectDocker lists containers and annotates the interesting ones.
 func (c *Collector) collectDocker(ctx context.Context) model.DockerInfo {
-	info := model.DockerInfo{}
+	// As above: an empty array, never null.
+	info := model.DockerInfo{Items: []model.Service{}}
 	client := c.opts.Docker
 	if client == nil {
 		info.Error = "docker support is disabled in the configuration"

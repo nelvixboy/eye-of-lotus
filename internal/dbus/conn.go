@@ -42,6 +42,9 @@ type Conn struct {
 	sock   net.Conn
 	r      *bufio.Reader
 	serial uint32
+	// uniqueName is the address the bus assigned in reply to Hello, for
+	// example ":1.42". It is only useful in logs.
+	uniqueName string
 	// Timeout bounds every method call.
 	Timeout time.Duration
 	closed  bool
@@ -69,7 +72,31 @@ func Dial(address string) (*Conn, error) {
 		sock.Close()
 		return nil, err
 	}
+	if err := c.hello(); err != nil {
+		sock.Close()
+		return nil, err
+	}
 	return c, nil
+}
+
+// hello introduces the client to the bus, which is not optional.
+//
+// The first message a client sends to a bus must be org.freedesktop.DBus.Hello;
+// a bus that receives anything else first is required by the specification
+// to disconnect the sender. The failure mode is hard to read from the
+// outside, because the disconnect arrives as an empty read on a later call
+// rather than as an error on the offending one.
+func (c *Conn) hello() error {
+	var uniqueName string
+	err := c.Call("org.freedesktop.DBus", "/org/freedesktop/DBus",
+		"org.freedesktop.DBus", "Hello", "", nil, &uniqueName)
+	if err != nil {
+		return fmt.Errorf("dbus: the bus refused the client introduction: %w", err)
+	}
+	c.mu.Lock()
+	c.uniqueName = uniqueName
+	c.mu.Unlock()
+	return nil
 }
 
 // parseAddress understands the unix:path= and unix:abstract= forms, which
@@ -118,16 +145,11 @@ func (c *Conn) auth() error {
 	if !strings.HasPrefix(line, "OK ") {
 		return fmt.Errorf("dbus: authentication rejected: %s", line)
 	}
-	if _, err := c.sock.Write([]byte("NEGOTIATE_UNIX_FD\r\n")); err != nil {
-		return err
-	}
-	line, err = c.readLine()
-	if err != nil {
-		return err
-	}
-	if !strings.HasPrefix(line, "AGREE_UNIX_FD") {
-		// Fine: the bus does not support fd passing, and we never pass any.
-	}
+	// Unix file descriptor passing is deliberately not negotiated. Nothing
+	// in this client sends or receives a descriptor, and once a bus has
+	// agreed to fd passing it expects a UNIX_FDS header field on every
+	// message that follows. Not asking is simpler and has fewer ways to
+	// go wrong.
 	if _, err := c.sock.Write([]byte("BEGIN\r\n")); err != nil {
 		return err
 	}
@@ -193,8 +215,17 @@ func (c *Conn) Call(dest, path, iface, member, bodySig string, args []any, out a
 		if out == nil || len(body) == 0 {
 			return nil
 		}
+		// The reply carries its own signature, and it is not necessarily
+		// the shape of the request. Hello is the clearest example: the
+		// call takes no arguments and answers with a string, so decoding
+		// the reply with the request's signature fails on a message that
+		// is perfectly well formed.
+		replySig, _ := fields[fieldSignature].(string)
+		if replySig == "" {
+			return nil
+		}
 		d := &decoder{buf: body}
-		return d.unmarshalValue(bodySig, out)
+		return d.unmarshalValue(replySig, out)
 	}
 }
 
@@ -208,8 +239,6 @@ func (e Error) Error() string { return "dbus: remote error " + e.Name }
 
 // buildCall assembles a complete method call message.
 func buildCall(serial uint32, dest, path, iface, member, bodySig string, args []any) ([]byte, error) {
-	// The body's absolute offset depends on the header, so the header is
-	// encoded first into a scratch buffer to learn its length.
 	headerFields := []headerField{
 		{fieldPath, ObjectPath(path)},
 		{fieldInterface, iface},
@@ -220,26 +249,40 @@ func buildCall(serial uint32, dest, path, iface, member, bodySig string, args []
 		headerFields = append(headerFields, headerField{fieldSignature, Signature(bodySig)})
 	}
 	header := encodeHeaderFields(headerFields)
-	bodyStart := alignTo(len(header), 8)
+
+	// The body begins at the next 8 byte boundary after the header field
+	// array, which itself starts at offset 16. Sixteen is a multiple of
+	// eight, so the array's own length is enough to work out where the
+	// body lands.
+	bodyStart := 16 + alignTo(len(header), 8)
 	body, err := MarshalBody(bodyStart, bodySig, args)
 	if err != nil {
 		return nil, err
 	}
-	h := &encoder{buf: make([]byte, bodyStart)}
-	h.buf = append(h.buf[:0], header...)
-	h.align(8)
-	h.buf = append(h.buf, body...)
 
 	fixed := make([]byte, 16)
 	fixed[0] = 'l'
 	fixed[1] = TypeMethodCall
 	fixed[2] = 0 // no flags
 	fixed[3] = 1 // protocol version
-	binary.LittleEndian.PutUint32(fixed[4:], uint32(len(h.buf)))
+	// The fixed header carries two separate lengths, and confusing them
+	// makes the daemon drop the connection without a word: the body length
+	// counts the body alone, and the field array length tells the daemon
+	// where that body begins.
+	binary.LittleEndian.PutUint32(fixed[4:], uint32(len(body)))
 	binary.LittleEndian.PutUint32(fixed[8:], serial)
-	// fixed[12:16] stays zero: the header field array is empty in the
-	// fixed part and appended below, which is what the spec requires.
-	return append(fixed, h.buf...), nil
+	binary.LittleEndian.PutUint32(fixed[12:], uint32(len(header)))
+
+	msg := make([]byte, 0, bodyStart+len(body))
+	msg = append(msg, fixed...)
+	msg = append(msg, header...)
+	// Padding between the array and the body. Without it the daemon reads
+	// the body from the wrong offset.
+	for len(msg) < bodyStart {
+		msg = append(msg, 0)
+	}
+	msg = append(msg, body...)
+	return msg, nil
 }
 
 type headerField struct {
@@ -249,9 +292,15 @@ type headerField struct {
 
 // encodeHeaderFields writes the a(yv) header field array.
 func encodeHeaderFields(fs []headerField) []byte {
+	// Only the contents of the array are returned, without a length
+	// prefix. In a real message that prefix is the field at offset 12 of
+	// the fixed header, which is to say the array begins there rather than
+	// after it. Writing a second prefix here shifts the whole message by
+	// eight bytes and the daemon drops the connection.
+	//
+	// The length of what is returned is a byte count, because a D-Bus
+	// array measures its contents in bytes and not in elements.
 	e := &encoder{}
-	e.writeUint32(uint32(len(fs)))
-	e.align(8)
 	for _, f := range fs {
 		e.align(8)
 		e.writeByte(f.code)
@@ -270,15 +319,10 @@ func encodeHeaderFields(fs []headerField) []byte {
 	return e.buf
 }
 
-func alignTo(n, a int) int {
-	if n%a == 0 {
-		return n
-	}
-	return n + a - n%a
-}
-
 // readMessage reads one complete message from the wire.
 func (c *Conn) readMessage() (map[byte]any, []byte, error) {
+	// The first sixteen bytes: twelve of message metadata followed by the
+	// length of the header field array, whose contents begin at byte 16.
 	fixed := make([]byte, 16)
 	if _, err := io.ReadFull(c.r, fixed); err != nil {
 		return nil, nil, err
@@ -291,24 +335,31 @@ func (c *Conn) readMessage() (map[byte]any, []byte, error) {
 	if bodyLen < 0 || fieldsLen < 0 || bodyLen > 64<<20 || fieldsLen > 16<<20 {
 		return nil, nil, errors.New("dbus: implausible message length")
 	}
-	rest := make([]byte, fieldsLen+bodyLen)
+	// The array contents are padded to an 8 byte boundary before the body,
+	// so what follows the fixed header is longer than the two lengths
+	// added together whenever the contents do not end on one.
+	padded := alignTo(fieldsLen, 8)
+	rest := make([]byte, padded+bodyLen)
 	if _, err := io.ReadFull(c.r, rest); err != nil {
 		return nil, nil, err
 	}
 	fieldsBuf := rest[:fieldsLen]
-	body := rest[fieldsLen:]
+	body := rest[padded:]
 
+	// The contents are a bare sequence of (yv) structs: the array framing
+	// was the length field in the fixed header, which has already been
+	// consumed, so there is no second prefix to read here.
 	fields := make(map[byte]any, 8)
 	if fieldsLen > 0 {
 		d := &decoder{buf: fieldsBuf}
-		var raw []struct {
-			Code  byte
-			Value any
-		}
-		if err := d.unmarshalValue("a(yv)", &raw); err != nil {
-			return nil, nil, err
-		}
-		for _, f := range raw {
+		for d.pos < len(d.buf) {
+			var f struct {
+				Code  byte
+				Value any
+			}
+			if err := d.unmarshalValue("(yv)", &f); err != nil {
+				return nil, nil, err
+			}
 			switch f.Code {
 			case fieldPath, fieldInterface, fieldMember, fieldErrorName, fieldDestination, fieldSignature:
 				fields[f.Code] = stringOf(f.Value)
@@ -318,6 +369,14 @@ func (c *Conn) readMessage() (map[byte]any, []byte, error) {
 		}
 	}
 	return fields, body, nil
+}
+
+// alignTo rounds n up to the next multiple of a.
+func alignTo(n, a int) int {
+	if n%a == 0 {
+		return n
+	}
+	return n + a - n%a
 }
 
 func stringOf(v any) string {

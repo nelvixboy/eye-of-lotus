@@ -1,6 +1,8 @@
 package dbus
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/binary"
 	"testing"
 )
@@ -247,5 +249,101 @@ func TestParseAddress(t *testing.T) {
 	}
 	if _, _, err := parseAddress("tcp:host=localhost,port=1234"); err == nil {
 		t.Error("an unsupported transport should be an error")
+	}
+}
+
+// TestBuildCallRoundTrip feeds a freshly built method call back through the
+// client's own reader. This is the check that would have caught the two
+// length fields in the fixed header being wrong, since a real daemon drops
+// the connection over them and this reader fails in the same place.
+func TestBuildCallRoundTrip(t *testing.T) {
+	msg, err := buildCall(7,
+		"org.freedesktop.systemd1",
+		"/org/freedesktop/systemd1",
+		"org.freedesktop.systemd1.Manager",
+		"GetVersionString", "", nil)
+	if err != nil {
+		t.Fatalf("buildCall: %v", err)
+	}
+	if msg[0] != 'l' || msg[1] != TypeMethodCall {
+		t.Fatalf("fixed header is wrong: endianness %q type %d", msg[0], msg[1])
+	}
+	if got := binary.LittleEndian.Uint32(msg[4:8]); got != 0 {
+		t.Errorf("body length = %d for a call without arguments, want 0", got)
+	}
+	if got := binary.LittleEndian.Uint32(msg[8:12]); got != 7 {
+		t.Errorf("serial = %d, want 7", got)
+	}
+	fieldsLen := int(binary.LittleEndian.Uint32(msg[12:16]))
+	if fieldsLen == 0 {
+		t.Fatal("header field array length is zero: a daemon would drop the connection")
+	}
+	if 16+alignTo(fieldsLen, 8) != len(msg) {
+		t.Errorf("lengths do not add up: 16 + %d + 0 != %d", alignTo(fieldsLen, 8), len(msg))
+	}
+
+	c := &Conn{r: bufio.NewReader(bytes.NewReader(msg))}
+	fields, _, err := c.readMessage()
+	if err != nil {
+		t.Fatalf("readMessage on a message this package built: %v", err)
+	}
+	want := map[byte]string{
+		fieldPath:        "/org/freedesktop/systemd1",
+		fieldInterface:   "org.freedesktop.systemd1.Manager",
+		fieldMember:      "GetVersionString",
+		fieldDestination: "org.freedesktop.systemd1",
+	}
+	for code, value := range want {
+		if got := fields[code]; got != value {
+			t.Errorf("header field %d = %v, want %q", code, got, value)
+		}
+	}
+}
+
+// TestBuildCallWithArguments checks the invariant that matters once a body
+// is present: the two lengths in the fixed header, plus the padding before
+// the body, must account for every byte after the fixed header. A D-Bus
+// array records its size in bytes, so the header array length is a byte
+// count and not the number of fields.
+func TestBuildCallWithArguments(t *testing.T) {
+	msg, err := buildCall(9,
+		"org.freedesktop.systemd1",
+		"/org/freedesktop/systemd1/unit/nginx_2eservice",
+		"org.freedesktop.DBus.Properties",
+		"Get", "ss",
+		[]any{"org.freedesktop.systemd1.Unit", "UnitFileState"})
+	if err != nil {
+		t.Fatalf("buildCall: %v", err)
+	}
+	bodyLen := int(binary.LittleEndian.Uint32(msg[4:8]))
+	fieldsLen := int(binary.LittleEndian.Uint32(msg[12:16]))
+	if bodyLen == 0 {
+		t.Error("body length is zero for a call that carries arguments")
+	}
+	if fieldsLen == 0 {
+		t.Error("header field array length is zero")
+	}
+	if 16+alignTo(fieldsLen, 8)+bodyLen != len(msg) {
+		t.Errorf("lengths do not add up: 16 + %d + %d != %d",
+			alignTo(fieldsLen, 8), bodyLen, len(msg))
+	}
+
+	// The body has to decode from the reader's slice without help, which
+	// is only true when that slice starts on an 8 byte boundary.
+	c := &Conn{r: bufio.NewReader(bytes.NewReader(msg))}
+	_, body, err := c.readMessage()
+	if err != nil {
+		t.Fatalf("readMessage: %v", err)
+	}
+	d := &decoder{buf: body}
+	var iface, name string
+	if err := d.unmarshalValue("s", &iface); err != nil {
+		t.Fatalf("decode first argument: %v", err)
+	}
+	if err := d.unmarshalValue("s", &name); err != nil {
+		t.Fatalf("decode second argument: %v", err)
+	}
+	if iface != "org.freedesktop.systemd1.Unit" || name != "UnitFileState" {
+		t.Errorf("arguments decoded as %q, %q", iface, name)
 	}
 }
