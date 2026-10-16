@@ -18,6 +18,9 @@
 #                         0.0.0.0:9110 to serve the whole local network.
 #       --no-docker-group leave the service account out of the docker
 #                         group, at the cost of container visibility
+#       --uninstall       remove everything this script installed: the
+#                         service, the binary, the configuration, the
+#                         history and the service account
 #       --dry-run         show what would be done, change nothing
 #   -h, --help            this message
 #
@@ -29,6 +32,7 @@ set -euo pipefail
 BIN_SRC=""
 LISTEN="127.0.0.1:9110"
 LISTEN_SET=0
+UNINSTALL=0
 DRY_RUN=0
 ADD_DOCKER_GROUP=1
 
@@ -69,6 +73,10 @@ while [ $# -gt 0 ]; do
 		ADD_DOCKER_GROUP=0
 		shift
 		;;
+	--uninstall)
+		UNINSTALL=1
+		shift
+		;;
 	--dry-run)
 		DRY_RUN=1
 		shift
@@ -78,14 +86,52 @@ while [ $# -gt 0 ]; do
 	esac
 done
 
-[ -n "$BIN_SRC" ] || die "no binary given; use -b PATH (try --help)"
-[ -f "$BIN_SRC" ] || die "no such file: $BIN_SRC"
-[ -f "$UNIT_SRC" ] || die "cannot find eye-of-lotus.service next to this script (looked in ${HERE})"
+# Removing needs no binary and no unit file, so those requirements only
+# apply to an install.
+if [ "$UNINSTALL" -eq 0 ]; then
+	[ -n "$BIN_SRC" ] || die "no binary given; use -b PATH (try --help)"
+	[ -f "$BIN_SRC" ] || die "no such file: $BIN_SRC"
+	[ -f "$UNIT_SRC" ] || die "cannot find eye-of-lotus.service next to this script (looked in ${HERE})"
+fi
 
 if [ "$DRY_RUN" -eq 0 ]; then
 	[ "$(id -u)" -eq 0 ] || die "run this as root (sudo $0 ...)"
 	command -v systemctl >/dev/null 2>&1 ||
 		die "systemctl not found: this installer is for systemd hosts; see the README for the manual steps"
+fi
+
+if [ "$UNINSTALL" -eq 1 ]; then
+	[ "$DRY_RUN" -eq 0 ] || die "--uninstall and --dry-run together make no sense"
+	step "Removing Eye of Lotus"
+	# Only what this installer created is touched. The docker group, the
+	# firewall and anything else on the host are left exactly as they are,
+	# because this script cannot know who else depends on them.
+	if systemctl list-unit-files 2>/dev/null | grep -q "^${SERVICE}\.service"; then
+		systemctl disable --now "$SERVICE" >/dev/null 2>&1 || true
+		say "service stopped and disabled"
+	fi
+	rm -f "$UNIT_DST"
+	systemctl daemon-reload >/dev/null 2>&1 || true
+	say "removed ${UNIT_DST}"
+	rm -f "$BIN_DST"
+	say "removed ${BIN_DST}"
+	rm -rf "$CONF_DIR"
+	say "removed ${CONF_DIR} (the password lived here)"
+	rm -rf "$DATA_DIR"
+	say "removed ${DATA_DIR} (the metric history lived here)"
+	if id -u "$RUN_USER" >/dev/null 2>&1; then
+		userdel "$RUN_USER" 2>/dev/null || true
+		say "removed user ${RUN_USER}"
+	fi
+	if getent group "$RUN_USER" >/dev/null 2>&1; then
+		groupdel "$RUN_USER" 2>/dev/null || true
+		say "removed group ${RUN_USER}"
+	fi
+	printf '\n'
+	say "The firewall was not touched, so any rule opened for the panel is"
+	say "still there. Check with: ufw status"
+	printf '\n'
+	exit 0
 fi
 
 # A binary that cannot run is worse than no install, so ask it who it is.
